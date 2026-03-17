@@ -59,6 +59,7 @@ html, body, [data-testid="stAppViewContainer"] {
   font-weight: 800;
   background: linear-gradient(90deg, var(--purple), var(--purple-light));
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
   letter-spacing: -0.5px;
 }
@@ -473,4 +474,24 @@ html, body, [data-testid="stAppViewContainer"] {
 @media (max-width: 768px) {
   .metric-grid { grid-template-columns: repeat(2, 1fr); }
   .smix-topbar { flex-direction: column; gap: 8px; text-align: center; }
+}
+
+.wa-btn-sm {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: linear-gradient(135deg, #075E54, #128C7E);
+  color: #fff !important;
+  font-weight: 600;
+  font-size: .75rem;
+  padding: 6px 14px;
+  border-radius: 6px;
+  text-decoration: none !important;
+  transition: all .2s;
+}
+
+.wa-btn-sm:hover {
+  background: linear-gradient(135deg, #128C7E, #25D366);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(37,211,102,.3);
 }

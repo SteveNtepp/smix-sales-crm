@@ -164,7 +164,16 @@ def init_db():
         )
     """)
 
-    conn.commit()
+    # Schema Migrations
+    try:
+        c.execute("ALTER TABLE scripts ADD COLUMN IF NOT EXISTS attachment_url TEXT")
+        c.execute("ALTER TABLE script_templates ADD COLUMN IF NOT EXISTS attachment_url TEXT")
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        # Log error or ignore if columns already exist (though IF NOT EXISTS handles it)
+        pass
+
     _seed_users(conn)
     _seed_config(conn)
     _seed_scripts(conn)
@@ -630,20 +639,20 @@ def update_config(key: str, value: str):
 def get_scripts() -> dict:
     conn = get_connection()
     with conn.cursor() as cur:
-        cur.execute("SELECT day, title, content FROM scripts")
+        cur.execute("SELECT day, title, content, attachment_url FROM scripts")
         rows = cur.fetchall()
     conn.close()
-    return {r["day"]: {"title": r["title"], "content": r["content"]} for r in rows}
+    return {r["day"]: {"title": r["title"], "content": r["content"], "attachment_url": r.get("attachment_url", "")} for r in rows}
 
 
-def update_script(day: str, title: str, content: str):
+def update_script(day: str, title: str, content: str, attachment_url: str = ""):
     clear_cache()
     conn = get_connection()
     with conn.cursor() as cur:
         cur.execute("""
-            INSERT INTO scripts(day,title,content) VALUES(%s,%s,%s) 
-            ON CONFLICT (day) DO UPDATE SET title=EXCLUDED.title, content=EXCLUDED.content
-        """, (day, title, content))
+            INSERT INTO scripts(day,title,content,attachment_url) VALUES(%s,%s,%s,%s) 
+            ON CONFLICT (day) DO UPDATE SET title=EXCLUDED.title, content=EXCLUDED.content, attachment_url=EXCLUDED.attachment_url
+        """, (day, title, content, attachment_url))
     conn.commit()
     conn.close()
 
@@ -658,24 +667,24 @@ def get_script_templates() -> pd.DataFrame:
     return df
 
 
-def add_script_template(name: str, category: str, content: str, created_by: str) -> int:
+def add_script_template(name: str, category: str, content: str, created_by: str, attachment_url: str = "") -> int:
     clear_cache()
     conn = get_connection()
     c = conn.cursor()
-    c.execute("INSERT INTO script_templates(name,category,content,created_by) VALUES(%s,%s,%s,%s) RETURNING id",
-              (name, category, content, created_by))
+    c.execute("INSERT INTO script_templates(name,category,content,created_by,attachment_url) VALUES(%s,%s,%s,%s,%s) RETURNING id",
+              (name, category, content, created_by, attachment_url))
     tid = c.fetchone()["id"]
     conn.commit()
     conn.close()
     return tid
 
 
-def update_script_template(tid: int, name: str, category: str, content: str):
+def update_script_template(tid: int, name: str, category: str, content: str, attachment_url: str = ""):
     clear_cache()
     conn = get_connection()
     with conn.cursor() as cur:
-        cur.execute("UPDATE script_templates SET name=%s,category=%s,content=%s WHERE id=%s",
-                     (name, category, content, tid))
+        cur.execute("UPDATE script_templates SET name=%s,category=%s,content=%s,attachment_url=%s WHERE id=%s",
+                     (name, category, content, attachment_url, tid))
     conn.commit()
     conn.close()
 
@@ -948,29 +957,52 @@ def get_agent_commission(username: str) -> float:
 
 @st.cache_data(ttl=300)
 def get_weekly_kpis() -> dict:
-    conn = get_connection()
-    df = pd.read_sql_query("""
-        SELECT assigned_to, COUNT(*) AS total,
-               SUM(CASE WHEN status='Inscrit/Soldé' THEN 1 ELSE 0 END) AS closed,
-               SUM(CASE WHEN status != 'Nouveau' THEN 1 ELSE 0 END) AS contacted,
-               SUM(CASE WHEN status='Inscrit/Soldé' THEN amount_paid ELSE 0 END) AS revenue
-        FROM leads WHERE created_at >= NOW() - INTERVAL '7 days'
-        GROUP BY assigned_to
-    """, get_engine())
-    conn.close()
-    if df.empty: return {"closer": None, "contacts": None, "commission": None}
+    engine = get_engine()
     
-    df["rate"] = df.apply(lambda r: r["closed"] / r["total"] if r["total"] > 0 else 0, axis=1)
-    df["commission"] = df["revenue"] * 0.10
+    # 1. Contacted Leads (last 7 days)
+    # Counts unique leads that were either moved from Nouveau or had a contact action
+    df_contacts = pd.read_sql_query("""
+        SELECT "user" as agent, COUNT(DISTINCT lead_id) AS contacted
+        FROM activity_log
+        WHERE created_at >= NOW() - INTERVAL '7 days'
+          AND (
+            (action = 'UPDATED' AND detail NOT LIKE '%%→ Nouveau%%' AND detail LIKE '%%Statut →%%')
+            OR action IN ('CONTACTED', 'WHATSAPP_SENT')
+          )
+        GROUP BY "user"
+    """, engine)
+
+    # 2. Closed Leads & Revenue (last 7 days)
+    # Counts leads moved to 'Inscrit/Soldé'
+    df_sales = pd.read_sql_query("""
+        SELECT a."user" as agent, COUNT(DISTINCT a.lead_id) AS closed, SUM(l.amount_paid) AS revenue
+        FROM activity_log a
+        JOIN leads l ON a.lead_id = l.id
+        WHERE a.created_at >= NOW() - INTERVAL '7 days'
+          AND a.action = 'UPDATED' AND a.detail LIKE '%%Inscrit/Soldé%%'
+        GROUP BY a."user"
+    """, engine)
+
+    # Merge stats
+    agents = pd.concat([df_contacts["agent"], df_sales["agent"]]).unique()
+    stats = pd.DataFrame({"agent": agents})
+    stats = stats.merge(df_contacts, on="agent", how="left").fillna(0)
+    stats = stats.merge(df_sales, on="agent", how="left").fillna(0)
     
-    top_closer = df[df["rate"] > 0].sort_values("rate", ascending=False).iloc[0] if not df[df["rate"] > 0].empty else None
-    top_contact = df[df["contacted"] > 0].sort_values("contacted", ascending=False).iloc[0] if not df[df["contacted"] > 0].empty else None
-    top_comm = df[df["commission"] > 0].sort_values("commission", ascending=False).iloc[0] if not df[df["commission"] > 0].empty else None
+    # Conversion rate: closed / contacted (of the week)
+    stats["rate"] = stats.apply(lambda r: r["closed"] / r["contacted"] if r["contacted"] > 0 else 0, axis=1)
+    stats["commission"] = stats["revenue"] * 0.10
+    
+    if stats.empty: return {"closer": None, "contacts": None, "commission": None}
+    
+    top_closer = stats[stats["rate"] > 0].sort_values("rate", ascending=False).iloc[0] if not stats[stats["rate"] > 0].empty else None
+    top_contact = stats[stats["contacted"] > 0].sort_values("contacted", ascending=False).iloc[0] if not stats[stats["contacted"] > 0].empty else None
+    top_comm = stats[stats["commission"] > 0].sort_values("commission", ascending=False).iloc[0] if not stats[stats["commission"] > 0].empty else None
     
     return {
-        "closer": {"agent": top_closer["assigned_to"], "val": top_closer["rate"]} if top_closer is not None else None,
-        "contacts": {"agent": top_contact["assigned_to"], "val": top_contact["contacted"]} if top_contact is not None else None,
-        "commission": {"agent": top_comm["assigned_to"], "val": top_comm["commission"]} if top_comm is not None else None,
+        "closer": {"agent": top_closer["agent"], "val": top_closer["rate"]} if top_closer is not None else None,
+        "contacts": {"agent": top_contact["agent"], "val": top_contact["contacted"]} if top_contact is not None else None,
+        "commission": {"agent": top_comm["agent"], "val": top_comm["commission"]} if top_comm is not None else None,
     }
 
 
@@ -1016,6 +1048,8 @@ def export_leads_excel() -> bytes:
 
 def log_activity(user: str, lead_id: int, action: str, detail: str = ""):
     clear_cache()
+    # Ensure lead_id is an int (not numpy.int64)
+    lead_id = int(lead_id)
     conn = get_connection()
     with conn.cursor() as cur:
         cur.execute("INSERT INTO activity_log(\"user\",lead_id,action,detail) VALUES(%s,%s,%s,%s)",

@@ -11,6 +11,7 @@ import altair as alt
 import urllib.parse
 import re
 import os
+import requests
 from datetime import datetime, date
 
 import database_handler as db
@@ -58,6 +59,44 @@ def wa_link(phone: str, message: str) -> str:
     clean = re.sub(r"[\s\-\(\)\+]", "", phone)
     encoded = urllib.parse.quote(message, safe='', encoding='utf-8')
     return f"https://api.whatsapp.com/send?phone={clean}&text={encoded}"
+
+
+def get_absolute_url(path: str) -> str:
+    """Convert relative path to absolute URL using base_url config."""
+    if not path or path.startswith("http"):
+        return path
+    base_url = db.get_config().get("base_url", "").strip("/")
+    if base_url:
+        # Ensure path starts with /
+        if not path.startswith("/"):
+            path = "/" + path
+        return f"{base_url}{path}"
+    return path
+
+
+def save_uploaded_file(uploaded_file):
+    """Save file to Cloud Storage (Catbox) and return the public URL."""
+    if uploaded_file is not None:
+        try:
+            # We use Catbox.moe for permanent, public cloud storage
+            # This ensures links work perfectly on WhatsApp Cloud
+            url = "https://catbox.moe/user/api.php"
+            files = {'fileToUpload': (uploaded_file.name, uploaded_file.getvalue())}
+            data = {'reqtype': 'fileupload'}
+            
+            with st.spinner("Hébergement du fichier en cours..."):
+                response = requests.post(url, data=data, files=files)
+            
+            if response.status_code == 200:
+                public_url = response.text.strip()
+                return public_url
+            else:
+                st.error(f"Erreur d'hébergement (Catbox) : {response.status_code}")
+                return None
+        except Exception as e:
+            st.error(f"Erreur de connexion cloud : {e}")
+            return None
+    return None
 
 
 def extract_yt_id(url: str) -> str:
@@ -196,6 +235,7 @@ def render_sidebar(user: dict):
         st.markdown("**🗺️ Navigation**")
         st.markdown("---")
         nav = [("dashboard","📊","Dashboard"),("leads","👥","Mes Leads"),
+               ("bulk","🚀","Envoi Groupé"),
                ("scripts","💬","Scripts WhatsApp"),("analytics","📈","Analytique"),
                ("resources","📚","Ressources")]
         if user["role"] == "admin":
@@ -485,12 +525,25 @@ def _lead_detail(lead_id: int, user: dict):
                                      cfg.get("program_name","Community Manager Augmenté"),
                                      cfg.get("start_date","18 Avril 2026"))
                 st.markdown(f"**{sd.get('title','')}**")
-                st.markdown(f'<div class="script-card">{filled}</div>', unsafe_allow_html=True)
-                link = wa_link(lead.get("phone",""), filled)
+                
+                att = sd.get("attachment_url", "")
+                final_filled = filled
+                if att:
+                    abs_url = get_absolute_url(att)
+                    st.markdown(f"📎 **Pièce jointe :** [Ouvrir le fichier]({abs_url})")
+                    final_filled += f"\n\n📎 Pièce jointe : {abs_url}"
+                
+                st.markdown(f'<div class="script-card">{final_filled}</div>', unsafe_allow_html=True)
+                link = wa_link(lead.get("phone",""), final_filled)
                 st.markdown(f'<a href="{link}" target="_blank" class="wa-btn" style="margin-top:12px;display:inline-flex;">📲 Envoyer via WhatsApp (message complet)</a>',
                             unsafe_allow_html=True)
-                st.text_area("📋 Copier :", value=filled, height=200,
+                st.text_area("📋 Copier :", value=final_filled, height=200,
                              key=f"cp_{day}_{lead_id}", label_visibility="collapsed")
+                if st.button(f"✅ Marquer comme envoyé ({day})", key=f"log_dt_{day}_{lead_id}"):
+                    if lead['status'] == 'Nouveau':
+                        db.update_lead(lead['id'], {**lead, 'status': 'Contacté'})
+                    db.log_activity(user["username"], lead['id'], "WHATSAPP_SENT", f"Détail: Script {day}")
+                    st.success("Activité enregistrée !"); st.rerun()
 
     with t3:
         if templates.empty:
@@ -503,11 +556,25 @@ def _lead_detail(lead_id: int, user: dict):
                         ft = inject_vars(tr["content"], lead.get("name",""), lead.get("goal",""),
                                         cfg.get("price_promo","75 000 FCFA"),
                                         cfg.get("program_name",""), cfg.get("start_date",""))
-                        st.markdown(f'<div class="script-card">{ft}</div>', unsafe_allow_html=True)
-                        st.markdown(f'<a href="{wa_link(lead.get("phone",""),ft)}" target="_blank" class="wa-btn" style="margin-top:10px;display:inline-flex;">📲 WhatsApp</a>',
+                        
+                        att = tr.get("attachment_url", "")
+                        final_ft = ft
+                        if att:
+                            abs_url = get_absolute_url(att)
+                            st.markdown(f"📎 **Pièce jointe associée :** [Ouvrir]({abs_url})")
+                            final_ft += f"\n\n📎 Pièce jointe : {abs_url}"
+                            
+                        st.markdown(f'<div class="script-card">{final_ft}</div>', unsafe_allow_html=True)
+                        link = wa_link(lead.get("phone",""), final_ft)
+                        st.markdown(f'<a href="{link}" target="_blank" class="wa-btn" style="margin-top:10px;display:inline-flex;">📲 WhatsApp</a>',
                                     unsafe_allow_html=True)
                         tid = tr["id"]
-                        st.text_area("📋", value=ft, height=120, key=f"t_{tid}_{lead_id}", label_visibility="collapsed")
+                        st.text_area("📋", value=final_ft, height=120, key=f"t_{tid}_{lead_id}", label_visibility="collapsed")
+                        if st.button(f"✅ Marquer comme envoyé", key=f"log_tpl_{tid}_{lead_id}"):
+                            if lead['status'] == 'Nouveau':
+                                db.update_lead(lead['id'], {**lead, 'status': 'Contacté'})
+                            db.log_activity(user["username"], lead['id'], "WHATSAPP_SENT", f"Détail: Tpl {tr['name']}")
+                            st.success("Activité enregistrée !"); st.rerun()
 
     with t4:
         with st.form(f"edit_{lead_id}"):
@@ -587,26 +654,199 @@ def page_scripts(user: dict):
                 cfg.get("price_promo","75 000 FCFA"), cfg.get("program_name",""),
                 cfg.get("start_date","18 Avril 2026"))
             st.markdown(f"**{sd.get('title','')}**")
-            st.markdown(f'<div class="script-card">{filled}</div>', unsafe_allow_html=True)
-            st.markdown(f'<a href="{wa_link(lead.get("phone",""),filled)}" target="_blank" class="wa-btn" style="margin-top:12px;display:inline-flex;">📲 Envoyer (message complet)</a>',
-                        unsafe_allow_html=True)
-            st.text_area("📋", value=filled, height=180, key=f"sc_{day}", label_visibility="collapsed")
             
+            att = sd.get("attachment_url", "")
+            final_filled = filled
+            if att:
+                abs_url = get_absolute_url(att)
+                st.markdown(f"📎 **Pièce jointe :** [Ouvrir]({abs_url})")
+                final_filled += f"\n\n📎 Pièce jointe : {abs_url}"
+                
+            st.markdown(f'<div class="script-card">{final_filled}</div>', unsafe_allow_html=True)
+            link = wa_link(lead.get("phone",""), final_filled)
+            st.markdown(f'<a href="{link}" target="_blank" class="wa-btn" style="margin-top:12px;display:inline-flex;">📲 Envoyer via WhatsApp</a>',
+                        unsafe_allow_html=True)
+            st.text_area("📋", value=final_filled, height=180, key=f"sc_pg_{day}", label_visibility="collapsed")
+            if st.button(f"✅ Marquer comme envoyé ({day})", key=f"log_{day}"):
+                if lead['status'] == 'Nouveau':
+                    db.update_lead(lead['id'], {**lead, 'status': 'Contacté'})
+                db.log_activity(user["username"], lead['id'], "WHATSAPP_SENT", f"Script {day}")
+                st.success("Activité enregistrée !"); st.rerun()
+
+    # --- TAB 5: Modèles Scripts ---
     with tabs[4]:
         if templates.empty:
-            st.info("Aucun modèle de script disponible. L'admin peut en créer depuis le Cockpit Admin.")
+            st.info("Aucun modèle disponible.")
         else:
             for cat in templates["category"].unique():
                 st.markdown(f"**— {cat} —**")
-                for _, tr in templates[templates["category"]==cat].iterrows():
+                cat_tpls = templates[templates["category"] == cat]
+                for _, tr in cat_tpls.iterrows():
                     with st.expander(f"📄 {tr['name']}"):
                         ft = inject_vars(tr["content"], lead.get("name",""), lead.get("goal",""),
                                         cfg.get("price_promo","75 000 FCFA"),
                                         cfg.get("program_name",""), cfg.get("start_date",""))
-                        st.markdown(f'<div class="script-card">{ft}</div>', unsafe_allow_html=True)
-                        st.markdown(f'<a href="{wa_link(lead.get("phone",""),ft)}" target="_blank" class="wa-btn" style="margin-top:10px;display:inline-flex;">📲 WhatsApp</a>',
+                        
+                        att = tr.get("attachment_url", "")
+                        final_ft = ft
+                        if att:
+                            abs_url = get_absolute_url(att)
+                            st.markdown(f"📎 **Pièce jointe :** [Ouvrir]({abs_url})")
+                            final_ft += f"\n\n📎 Pièce jointe : {abs_url}"
+                            
+                        st.markdown(f'<div class="script-card">{final_ft}</div>', unsafe_allow_html=True)
+                        link = wa_link(lead.get("phone",""), final_ft)
+                        st.markdown(f'<a href="{link}" target="_blank" class="wa-btn" style="margin-top:10px;display:inline-flex;">📲 Envoyer via WhatsApp</a>',
                                     unsafe_allow_html=True)
-                        st.text_area("📋", value=ft, height=120, key=f"sct_{tr['id']}", label_visibility="collapsed")
+                        tid = tr["id"]
+                        st.text_area("📋", value=final_ft, height=120, key=f"tpl_pg_{tid}", label_visibility="collapsed")
+                        if st.button(f"✅ Marquer comme envoyé", key=f"log_tpl_pg_{tid}"):
+                            if lead['status'] == 'Nouveau':
+                                db.update_lead(lead['id'], {**lead, 'status': 'Contacté'})
+                            db.log_activity(user["username"], lead['id'], "WHATSAPP_SENT", f"Modèle: {tr['name']}")
+                            st.success("Activité enregistrée !"); st.rerun()
+
+
+# ── BULK MESSAGING ────────────────────────────────────────────────────────────
+
+def page_bulk_messaging(user: dict):
+    topbar(user)
+    st.markdown('<div class="section-header"><span class="accent">🚀</span> Envoi Groupé (Diffusion)</div>',
+                unsafe_allow_html=True)
+    
+    is_admin = user["role"] == "admin"
+    leads_df = db.get_leads(assigned_to=None if is_admin else user["username"])
+    
+    if leads_df.empty:
+        st.info("Aucun lead disponible pour l'envoi groupé.")
+        return
+
+    # Filters
+    st.markdown("#### 1. Filtrer les leads")
+    c1, c2 = st.columns(2)
+    with c1:
+        f_status = st.multiselect("Statut", STATUSES, default=["Nouveau", "Relance"])
+    with c2:
+        f_temp = st.multiselect("Température", ["🔥 Chaud", "⚡ Tiède", "❄️ Froid"], default=["🔥 Chaud", "⚡ Tiède"])
+    
+    filtered_df = leads_df.copy()
+    if f_status:
+        filtered_df = filtered_df[filtered_df["status"].isin(f_status)]
+    if f_temp:
+        filtered_df = filtered_df[filtered_df["temperature"].isin(f_temp)]
+        
+    st.info(f"💡 **{len(filtered_df)}** leads correspondent à vos filtres.")
+    
+    if filtered_df.empty:
+        st.warning("Aucun lead ne correspond aux filtres sélectionnés.")
+        return
+
+    # Template selection
+    st.markdown("---")
+    st.markdown("#### 2. Configurer le message")
+    
+    scripts = db.get_scripts()
+    tpls = db.get_script_templates()
+    
+    all_templates = {}
+    for day in ["J1", "J3", "J5", "J7"]:
+        s = scripts.get(day)
+        if s: all_templates[f"📜 {s['title']}"] = {"content": s["content"], "attachment": s.get("attachment_url", "")}
+            
+    for _, t in tpls.iterrows():
+        all_templates[f"📚 {t['category']} : {t['name']}"] = {"content": t["content"], "attachment": t.get("attachment_url", "")}
+        
+    sel_tpl_name = st.selectbox("Modèle à utiliser", list(all_templates.keys()))
+    sel_tpl_data = all_templates[sel_tpl_name]
+    sel_tpl_content = sel_tpl_data["content"]
+    att = sel_tpl_data["attachment"]
+    
+    cfg = db.get_config()
+
+    st.markdown("---")
+    st.markdown("#### 3. Exécution")
+    
+    # NEW: Stabilization of the list
+    if "bulk_leads_ids" not in st.session_state:
+        st.session_state.bulk_leads_ids = []
+    if "bulk_idx" not in st.session_state:
+        st.session_state.bulk_idx = 0
+
+    # Detect mismatch between filters and loaded list
+    current_filter_ids = filtered_df["id"].tolist()
+    mismatch = st.session_state.bulk_leads_ids != current_filter_ids
+    
+    if mismatch and st.session_state.bulk_leads_ids:
+        st.warning(f"⚠️ Vos filtres ont changé ({len(current_filter_ids)} leads) mais la campagne actuelle contient encore {len(st.session_state.bulk_leads_ids)} leads.")
+
+    if not st.session_state.bulk_leads_ids or st.button("🔄 Charger / Réinitialiser la liste", type="primary" if mismatch else "secondary"):
+        st.session_state.bulk_leads_ids = current_filter_ids
+        st.session_state.bulk_idx = 0
+        st.rerun()
+
+    total_leads = len(st.session_state.bulk_leads_ids)
+    
+    if st.session_state.bulk_idx < total_leads:
+        current_id = st.session_state.bulk_leads_ids[st.session_state.bulk_idx]
+        # Get fresh lead data for this ID
+        lead_data = db.get_lead(current_id)
+        
+        if not lead_data:
+            st.session_state.bulk_idx += 1
+            st.rerun()
+
+        # Prepare message
+        # In Bulk Messaging, we now have 'att' from the selection above
+        
+        filled = inject_vars(sel_tpl_content, str(lead_data["name"]), str(lead_data["goal"]),
+                             cfg.get("price_promo", "75 000 FCFA"), cfg.get("program_name", ""),
+                             cfg.get("start_date", "18 Avril 2026"))
+        
+        final_filled = filled
+        if att:
+            abs_url = get_absolute_url(att)
+            final_filled += f"\n\n📎 Pièce jointe : {abs_url}"
+            
+        st.markdown(f"""
+        <div style="background:var(--surface2); padding: 20px; border-radius: 12px; border: 1px solid var(--purple); margin-bottom: 20px;">
+            <div style="font-size: 1.2rem; font-weight: 700; color: var(--purple-light);">
+                Lead {st.session_state.bulk_idx + 1} / {total_leads} : {lead_data['name']}
+            </div>
+            <div style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 5px;">
+                📞 {lead_data['phone']} | Statut actuel: {lead_data['status']}
+            </div>
+            {"<div style='margin-bottom:10px;'>📎 <b>Pièce jointe incluse</b></div>" if att else ""}
+            <div class="script-card" style="margin-bottom: 15px;">{final_filled}</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        link = wa_link(str(lead_data["phone"]), final_filled)
+        
+        # Action Buttons
+        st.markdown(f'<a href="{link}" target="_blank" class="wa-btn" style="width: 100%; justify-content: center; text-align: center; margin-bottom: 10px;">📲 1. Ouvrir WhatsApp & Envoyer</a>', unsafe_allow_html=True)
+        
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("✅ 2. Confirmer & Suivant", use_container_width=True, type="primary"):
+                # Mark as contacted and Log
+                if lead_data['status'] == 'Nouveau':
+                    db.update_lead(current_id, {**lead_data, 'status': 'Contacté'})
+                db.log_activity(user["username"], current_id, "WHATSAPP_SENT", f"Bulk: {sel_tpl_name}")
+                st.session_state.bulk_idx += 1
+                st.rerun()
+        
+        with c2:
+            if st.button("⏭️ Sauter / Plus tard", use_container_width=True):
+                st.session_state.bulk_idx += 1
+                st.rerun()
+                
+        st.caption("Instructions : Cliquez sur le bouton vert pour envoyer. Une fois envoyé sur WhatsApp, cliquez sur 'Confirmer & Suivant' pour valider vos points. Si vous ne voulez pas contacter ce lead maintenant, cliquez sur 'Sauter'.")
+    else:
+        st.success(f"🎉 Campagne terminée ! {total_leads} prospects ont été passés en revue.")
+        if st.button("Recommencer une nouvelle campagne"):
+            st.session_state.bulk_leads_ids = []
+            st.session_state.bulk_idx = 0
+            st.rerun()
 
 
 # ── ANALYTICS ─────────────────────────────────────────────────────────────────
@@ -799,23 +1039,53 @@ def page_cockpit_admin(user: dict):
         for day in ["J1","J3","J5","J7"]:
             d = sc.get(day,{})
             with st.expander(f"**{day}** — {d.get('title','')}"):
-                with st.form(f"sc_{day}"):
+                with st.form(f"sc_{day}", clear_on_submit=False):
                     nt = st.text_input("Titre",    value=d.get("title",""), key=f"t_{day}")
-                    nc = st.text_area("Contenu",   value=d.get("content",""), height=250, key=f"c_{day}")
+                    nc = st.text_area("Contenu",   value=d.get("content",""), height=250, key=f"c_{day}", 
+                                      help="💡 WhatsApp : *Gras*, _Italique_, ~Barré~, ```Code```")
+                    
+                    # File uploader directly in the form
+                    up_s = st.file_uploader("Changer la pièce jointe", type=["pdf","jpg","jpeg","png","mp3","mp4"], key=f"fup_{day}")
+                    
+                    # We still keep the text input in case they want to use an external link
+                    na = st.text_input("Ou Lien externe", value=d.get("attachment_url",""), key=f"a_{day}")
+                    
                     sv = st.form_submit_button(f"💾 Sauvegarder {day}", use_container_width=True)
-                if sv: db.update_script(day,nt,nc); st.success(f"✅ {day} mis à jour !"); st.rerun()
+                
+                if sv:
+                    final_url = na
+                    if up_s:
+                        path_s = save_uploaded_file(up_s)
+                        if path_s: final_url = path_s
+                    
+                    db.update_script(day, nt, nc, final_url)
+                    db.update_script(day, nt, nc, final_url)
+                    st.success(f"✅ {day} sauvegardé !")
+                    st.rerun()
 
     # ── Script templates
     with t3:
         with st.expander("➕ Ajouter un modèle", expanded=False):
-            with st.form("add_tpl", clear_on_submit=True):
+            with st.form("add_tpl_new", clear_on_submit=True):
                 tn  = st.text_input("Nom")
                 tc_ = st.selectbox("Catégorie", SCRIPT_CATEGORIES)
-                tco = st.text_area("Contenu", height=200)
+                tco = st.text_area("Contenu", height=200, help="💡 WhatsApp : *Gras*, _Italique_, ~Barré~")
+                up_new = st.file_uploader("Pièce jointe (Optionnel)", type=["pdf","jpg","jpeg","png","mp3","mp4"])
+                tau = st.text_input("Ou Lien externe (Optionnel)")
                 atb = st.form_submit_button("💾 Ajouter", type="primary", use_container_width=True)
+            
             if atb:
-                if tn and tco: db.add_script_template(tn,tc_,tco,user["username"]); st.success("✅ Modèle ajouté !"); st.rerun()
-                else: st.error("Nom et contenu requis.")
+                final_url = tau
+                if up_new:
+                    path_new = save_uploaded_file(up_new)
+                    if path_new: final_url = path_new
+                
+                if tn and tco:
+                    db.add_script_template(tn, tc_, tco, user["username"], final_url)
+                    st.success("✅ Modèle ajouté !")
+                    st.rerun()
+                else:
+                    st.error("Nom et contenu requis.")
         tpls = db.get_script_templates()
         if tpls.empty:
             st.info("Aucun modèle.")
@@ -824,14 +1094,28 @@ def page_cockpit_admin(user: dict):
                 with st.expander(f"📄 {tr['name']} — {tr['category']}"):
                     ca,cb = st.columns([3,1])
                     with ca:
-                        with st.form(f"etpl_{tr['id']}"):
+                        with st.form(f"etpl_form_{tr['id']}"):
                             en = st.text_input("Nom",      value=tr["name"],     key=f"en_{tr['id']}")
                             ec = st.selectbox("Catégorie", SCRIPT_CATEGORIES,
                                              index=SCRIPT_CATEGORIES.index(tr["category"]) if tr["category"] in SCRIPT_CATEGORIES else 0,
                                              key=f"ec_{tr['id']}")
                             eco= st.text_area("Contenu",   value=tr["content"],  height=180, key=f"eco_{tr['id']}")
+                            
+                            up_e = st.file_uploader("Changer la pièce jointe", type=["pdf","jpg","jpeg","png","mp3","mp4"], key=f"up_e_{tr['id']}")
+                            eau= st.text_input("Lien actuel/externe", value=tr.get("attachment_url",""), key=f"eau_{tr['id']}")
+                            
                             sv = st.form_submit_button("💾 Modifier", use_container_width=True)
-                        if sv: db.update_script_template(int(tr["id"]),en,ec,eco); st.success("✅"); st.rerun()
+                        
+                        if sv:
+                            final_url = eau
+                            if up_e:
+                                path_e = save_uploaded_file(up_e)
+                                if path_e: final_url = path_e
+                            
+                            db.update_script_template(int(tr["id"]), en, ec, eco, final_url)
+                            db.update_script_template(int(tr["id"]), en, ec, eco, final_url)
+                            st.success("✅ Modèle sauvegardé !")
+                            st.rerun()
                     with cb:
                         st.markdown(f"*Par {tr.get('created_by','—')}*")
                         if st.button("🗑️ Supprimer", key=f"dt_{tr['id']}"):
@@ -976,6 +1260,7 @@ def main():
     page = st.session_state.page
     if page == "dashboard":   page_dashboard(user)
     elif page == "leads":     page_leads(user)
+    elif page == "bulk":      page_bulk_messaging(user)
     elif page == "scripts":   page_scripts(user)
     elif page == "analytics": page_analytics(user)
     elif page == "resources": page_resources(user)
