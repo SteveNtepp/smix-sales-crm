@@ -807,18 +807,23 @@ def page_bulk_messaging(user: dict):
             abs_url = get_absolute_url(att)
             final_filled += f"\n\n📎 Pièce jointe : {abs_url}"
             
+        # Display lead info and script
         st.markdown(f"""
-        <div style="background:var(--surface2); padding: 20px; border-radius: 12px; border: 1px solid var(--purple); margin-bottom: 20px;">
-            <div style="font-size: 1.2rem; font-weight: 700; color: var(--purple-light);">
+        <div style="background:var(--surface2); padding: 20px; border-radius: 12px; border: 1px solid var(--purple); margin-bottom: 10px;">
+            <div style="font-size: 1.1rem; font-weight: 700; color: var(--purple-light);">
                 Lead {st.session_state.bulk_idx + 1} / {total_leads} : {lead_data['name']}
             </div>
-            <div style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 5px;">
-                📞 {lead_data['phone']} | Statut actuel: {lead_data['status']}
+            <div style="font-size: 0.85rem; color: var(--text-muted);">
+                📞 {lead_data['phone']} | Statut: {lead_data['status']}
             </div>
-            {"<div style='margin-bottom:10px;'>📎 <b>Pièce jointe incluse</b></div>" if att else ""}
-            <div class="script-card" style="margin-bottom: 15px;">{final_filled}</div>
         </div>
         """, unsafe_allow_html=True)
+        
+        if att:
+            st.info("📎 **Pièce jointe incluse**")
+            
+        final_filled_html = final_filled.replace("\n", "<br>")
+        st.markdown(f'<div class="script-card">{final_filled_html}</div>', unsafe_allow_html=True)
         
         link = wa_link(str(lead_data["phone"]), final_filled)
         
