@@ -102,6 +102,47 @@ footer { display: none !important; }
   text-transform: uppercase;
 }
 
+/* ─── NOTIFICATIONS ────────────────────────────────────────── */
+.smix-notif-icon {
+  position: relative;
+  font-size: 1.25rem;
+  cursor: pointer;
+  background: var(--surface2);
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  transition: all .2s;
+}
+
+.smix-notif-icon:hover {
+  background: var(--surface3);
+  border-color: var(--purple-dim);
+  transform: scale(1.05);
+}
+
+.notif-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  background: #ff4b4b; /* Streamlit Red */
+  color: white;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 10px;
+  min-width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 10px rgba(255, 75, 75, 0.5);
+  border: 2px solid var(--surface);
+}
+
 /* ─── METRIC CARDS ───────────────────────────────────────── */
 .metric-grid {
   display: grid;

@@ -164,6 +164,31 @@ def init_db():
         )
     """)
 
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS invoices (
+            id             SERIAL PRIMARY KEY,
+            lead_id        INTEGER REFERENCES leads(id) ON DELETE CASCADE,
+            invoice_number TEXT UNIQUE NOT NULL,
+            items          TEXT, -- Contenu textuel / JSON
+            total_amount   TEXT,
+            pdf_url        TEXT,
+            created_by     TEXT,
+            created_at     TIMESTAMP DEFAULT NOW()
+        )
+    """)
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS notifications (
+            id           SERIAL PRIMARY KEY,
+            recipient    TEXT NOT NULL, -- username
+            message      TEXT NOT NULL,
+            doc_type     TEXT, -- 'invoice', 'lead', etc.
+            doc_id       INTEGER,
+            is_read      BOOLEAN DEFAULT false,
+            created_at   TIMESTAMP DEFAULT NOW()
+        )
+    """)
+
     # Schema Migrations
     try:
         c.execute("ALTER TABLE scripts ADD COLUMN IF NOT EXISTS attachment_url TEXT")
@@ -1063,3 +1088,67 @@ def get_recent_activity(limit: int = 20) -> pd.DataFrame:
     df = pd.read_sql_query(
         "SELECT * FROM activity_log ORDER BY created_at DESC LIMIT %s", get_engine(), params=(limit,))
     return df
+# ── INVOICES ───────────────────────────────────────────────────────────────
+
+def add_invoice(lead_id: int, invoice_number: str, items: str, total_amount: str, pdf_url: str, created_by: str) -> int:
+    clear_cache()
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("""
+        INSERT INTO invoices (lead_id, invoice_number, items, total_amount, pdf_url, created_by)
+        VALUES (%s, %s, %s, %s, %s, %s) RETURNING id
+    """, (lead_id, invoice_number, items, total_amount, pdf_url, created_by))
+    inv_id = c.fetchone()["id"]
+    conn.commit()
+    conn.close()
+    return inv_id
+
+def get_lead_invoices(lead_id: int) -> list:
+    conn = get_connection()
+    with conn.cursor() as cur:
+        cur.execute("SELECT * FROM invoices WHERE lead_id=%s ORDER BY created_at DESC", (lead_id,))
+        rows = cur.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def get_next_invoice_number() -> str:
+    conn = get_connection()
+    with conn.cursor() as cur:
+        cur.execute("SELECT COUNT(*) as count FROM invoices")
+        count = cur.fetchone()["count"]
+    conn.close()
+    return f"INV-{datetime.now().strftime('%Y%m')}-{count + 1:03d}"
+
+# ── NOTIFICATIONS ─────────────────────────────────────────────────────────
+
+def add_notification(recipient: str, message: str, doc_type: str = None, doc_id: int = None):
+    clear_cache()
+    conn = get_connection()
+    with conn.cursor() as cur:
+        cur.execute("""
+            INSERT INTO notifications (recipient, message, doc_type, doc_id)
+            VALUES (%s, %s, %s, %s)
+        """, (recipient, message, doc_type, doc_id))
+    conn.commit()
+    conn.close()
+
+@st.cache_data
+def get_notifications(recipient: str, only_unread: bool = True) -> list:
+    conn = get_connection()
+    with conn.cursor() as cur:
+        query = "SELECT * FROM notifications WHERE recipient=%s"
+        if only_unread:
+            query += " AND is_read=false"
+        query += " ORDER BY created_at DESC LIMIT 50"
+        cur.execute(query, (recipient,))
+        rows = cur.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def mark_notification_as_read(notif_id: int):
+    clear_cache()
+    conn = get_connection()
+    with conn.cursor() as cur:
+        cur.execute("UPDATE notifications SET is_read=true WHERE id=%s", (notif_id,))
+    conn.commit()
+    conn.close()

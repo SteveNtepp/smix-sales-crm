@@ -5,3 +5,4 @@ altair>=5.0.0
 psycopg2-binary>=2.9.9
 SQLAlchemy>=2.0.0
 requests
+fpdf2>=2.7.0

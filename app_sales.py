@@ -15,6 +15,7 @@ import requests
 from datetime import datetime, date
 
 import database_handler as db
+import invoice_generator as ig
 
 # ── PAGE CONFIG ────────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -164,18 +165,42 @@ def render_score_bar(score: int, temp: str):
 
 
 def topbar(user: dict):
+    # Fetch unread notifications
+    notifs = db.get_notifications(user["username"], only_unread=True)
+    
     badge = ('<span class="smix-badge-admin">⚙️ Admin</span>'
              if user["role"] == "admin"
              else '<span class="smix-badge-sales">📊 Sales</span>')
+    
+    notif_count_html = ""
+    if notifs:
+        notif_count_html = f'<div class="notif-badge">{len(notifs)}</div>'
+
     st.markdown(f"""
     <div class="smix-topbar">
-      <span class="smix-logo">🎯 Smix Sales Assistant</span>
-      <div style="display:flex;align-items:center;gap:10px;">
+      <div style="display:flex;align-items:center;">
+        <span class="smix-logo">🎯 Smix Sales Assistant</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:20px;">
+        <div class="smix-notif-icon">
+          🔔 {notif_count_html}
+        </div>
         <span style="color:var(--text-muted);font-size:.85rem;">
           Bonjour, <strong style="color:var(--text);">{user['full_name']}</strong></span>
         {badge}
       </div>
     </div>""", unsafe_allow_html=True)
+    
+    # Simple unread list if notified
+    if notifs:
+        with st.expander("🔔 Nouvelles notifications"):
+            for n in notifs:
+                c1, c2 = st.columns([4, 1])
+                with c1: st.info(n["message"])
+                with c2: 
+                    if st.button("Valider", key=f"nr_{n['id']}"):
+                        db.mark_notification_as_read(n["id"])
+                        st.rerun()
 
 
 def fu_label(date_str: str):
@@ -487,7 +512,7 @@ def _lead_detail(lead_id: int, user: dict):
     if not lead: st.error("Lead introuvable."); return
     cfg = db.get_config(); scripts = db.get_scripts(); templates = db.get_script_templates()
     st.markdown(f"### 👤 {lead['name']} — Fiche Lead")
-    t1,t2,t3,t4 = st.tabs(["📋 Profil & Scoring","💬 Scripts WhatsApp","📚 Templates","✏️ Modifier"])
+    t1,t2,t3,t4,t5 = st.tabs(["📋 Profil & Scoring","💬 Scripts WhatsApp","📚 Templates","✏️ Modifier","🧾 Documents"])
 
     with t1:
         c1,c2 = st.columns(2)
@@ -597,9 +622,12 @@ def _lead_detail(lead_id: int, user: dict):
                 bconf = st.checkbox("✅ Budget confirmé", value=bool(lead.get("budget_confirmed")))
                 avail = st.checkbox("📅 Disponible",      value=bool(lead.get("available")))
                 fast  = st.checkbox("⚡ Réponse rapide",  value=bool(lead.get("fast_response")))
-                efd   = None
+                efd = date.today()
                 if lead.get("follow_up_date"):
-                    try: efd = date.fromisoformat(str(lead["follow_up_date"]))
+                    try:
+                        parsed_date = date.fromisoformat(str(lead["follow_up_date"]))
+                        if parsed_date >= date.today():
+                            efd = parsed_date
                     except: pass
                 fu_date = st.date_input("📅 Prochaine relance", value=efd, min_value=date.today(), format="DD/MM/YYYY")
             m1,m2,m3 = st.columns(3)
@@ -629,6 +657,32 @@ def _lead_detail(lead_id: int, user: dict):
             if st.button("🗑️ Supprimer ce lead"):
                 db.delete_lead(lead_id); db.log_activity(user["username"], lead_id, "DELETED", "")
                 st.session_state.selected_lead = None; st.rerun()
+
+    with t5:
+        st.markdown("**🧾 Factures & Reçus générés**")
+        invoices = db.get_lead_invoices(lead_id)
+        if not invoices:
+            st.info("Aucun document disponible pour ce prospect.")
+        else:
+            for inv in invoices:
+                with st.container():
+                    st.markdown(f"""
+                    <div style="background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:15px; margin-bottom:10px;">
+                        <div style="font-weight:700; color:var(--text); margin-bottom:5px;">📄 {inv['invoice_number']}</div>
+                        <div style="font-size:0.85rem; color:var(--text-muted); margin-bottom:10px;">
+                            Montant : {inv['total_amount']} | Date : {inv['created_at'].strftime('%d/%m/%Y')}
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        st.markdown(f"[📥 Télécharger le PDF]({inv['pdf_url']})")
+                    with c2:
+                        wa_msg = f"Bonjour {lead['name']},\n\nVoici votre reçu/facture concernant le bootcamp Smix Academy : {inv['pdf_url']}\n\nMerci de votre confiance ! 🙏🏾"
+                        link = wa_link(lead.get("phone",""), wa_msg)
+                        st.markdown(f'<a href="{link}" target="_blank" class="wa-btn" style="padding:6px 12px; font-size:0.8rem;">📲 Partager par WhatsApp</a>', unsafe_allow_html=True)
+                st.markdown("---")
 
 
 
@@ -944,9 +998,9 @@ def page_cockpit_admin(user: dict):
     if user["role"] != "admin":
         st.error("🔒 Accès réservé."); return
 
-    t1,t2,t3,t4,t5,t6,t7 = st.tabs([
+    t1,t2,t3,t4,t5,t6,t7,t8 = st.tabs([
         "⚙️ Offre","✏️ Scripts J1-J7","📚 Modèles Scripts",
-        "📖 Ressources Kit","🎬 Vidéos","👥 Agents","📊 Leaderboard & Export"
+        "📖 Ressources Kit","🎬 Vidéos","👥 Agents","📊 Leaderboard & Export", "🧾 Factures"
     ])
     cfg = db.get_config()
 
@@ -1179,6 +1233,63 @@ def page_cockpit_admin(user: dict):
                 file_name=f"smix_leads_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 type="primary", use_container_width=True)
+
+    # ── Invoices Tab
+    with t8:
+        st.markdown("**🧾 Générer une facture / reçu**")
+        leads_df = db.get_leads()
+        if leads_df.empty:
+            st.info("Aucun lead pour générer une facture.")
+        else:
+            with st.form("new_invoice", clear_on_submit=True):
+                lead_options = {f"{r['name']} ({r['phone']})": r["id"] for _, r in leads_df.iterrows()}
+                sel_lead_label = st.selectbox("Sélectionner le Lead", list(lead_options.keys()))
+                inv_num = st.text_input("Numéro de Facture", value=db.get_next_invoice_number())
+                
+                st.markdown("---")
+                st.markdown("**Détails des articles**")
+                item_desc = st.text_input("Description", value="Bootcamp Community Manager Augmenté")
+                item_qty = st.number_input("Quantité", min_value=1, value=1)
+                item_price = st.text_input("Montant (ex: 75 000 FCFA)", value=cfg.get("price_promo", "75 000 FCFA"))
+                total_val = st.text_input("Total Final", value=item_price)
+                
+                gen_btn = st.form_submit_button("🚀 Générer & Héberger la Facture", type="primary", use_container_width=True)
+                
+            if gen_btn:
+                sel_id = lead_options[sel_lead_label]
+                sel_lead = next(r for _, r in leads_df.iterrows() if r["id"] == sel_id)
+                inv_data = {
+                    "invoice_number": inv_num, "date": datetime.now().strftime("%d/%m/%Y"),
+                    "client_name": sel_lead["name"], "client_email": sel_lead.get("email", ""),
+                    "items": [{"desc": item_desc, "qty": item_qty, "price": item_price}],
+                    "total": total_val
+                }
+                with st.spinner("Génération du PDF..."):
+                    pdf_bytes = ig.generate_invoice_pdf(inv_data)
+                
+                class BytesFile:
+                    def __init__(self, b, name):
+                        self.b = b; self.name = name
+                    def getvalue(self): return self.b
+                
+                fake_file = BytesFile(pdf_bytes, f"{inv_num}.pdf")
+                pdf_url = save_uploaded_file(fake_file)
+                if pdf_url:
+                    db.add_invoice(sel_id, inv_num, f"{item_qty}x {item_desc}", total_val, pdf_url, user["username"])
+                    
+                    # 4. Notify Agent
+                    if sel_lead["assigned_to"]:
+                        db.add_notification(
+                            sel_lead["assigned_to"], 
+                            f"🧾 Nouvelle facture {inv_num} générée pour {sel_lead['name']}.",
+                            doc_type='invoice',
+                            doc_id=sel_id
+                        )
+                    
+                    db.log_activity(user["username"], sel_id, "INVOICE_CREATED", f"Facture {inv_num} générée.")
+                    st.success(f"✅ Facture {inv_num} générée !")
+                    st.markdown(f"🔗 [Lien PDF]({pdf_url})")
+                else: st.error("Erreur d'hébergement.")
 
 
 # ── ROUTER ────────────────────────────────────────────────────────────────────
