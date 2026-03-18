@@ -25,19 +25,19 @@ st.set_page_config(
 )
 
 @st.cache_resource
-def initialize_app():
-    # ── CSS ────────────────────────────────────────────────────────────────
-    p = os.path.join(os.path.dirname(__file__), "style.css")
-    css_content = ""
-    if os.path.exists(p):
-        with open(p) as f:
-            css_content = f.read()
-    
-    # ── DATABASE ───────────────────────────────────────────────────────────
+def initialize_db():
     db.init_db()
-    return css_content
 
-CSS_CONTENT = initialize_app()
+def load_css():
+    p = os.path.join(os.path.dirname(__file__), "style.css")
+    if os.path.exists(p):
+        with open(p, "r") as f:
+            return f.read()
+    return ""
+
+# ── INIT & BRANDING ────────────────────────────────────────────────────────────
+initialize_db()
+CSS_CONTENT = load_css()
 st.markdown(f"<style>{CSS_CONTENT}</style>", unsafe_allow_html=True)
 
 # ── SESSION STATE ──────────────────────────────────────────────────────────────
