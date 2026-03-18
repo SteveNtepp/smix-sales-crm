@@ -38,8 +38,17 @@ html, body, [data-testid="stAppViewContainer"] {
 footer { display: none !important; }
 [data-testid="stHeader"] { background: rgba(0,0,0,0) !important; }
 [data-testid="stDecoration"] { display: none !important; }
-[data-testid="stToolbar"] { display: none !important; }
 .stDeployButton { display: none !important; }
+
+/* Force Sidebar Toggle Visibility */
+[data-testid="stSidebarCollapsedControl"] {
+  display: flex !important;
+  visibility: visible !important;
+  color: var(--purple-light) !important;
+  background: var(--surface2) !important;
+  border-radius: 0 8px 8px 0 !important;
+  padding: 5px !important;
+}
 
 [data-testid="stSidebar"] {
   background: var(--surface) !important;
