@@ -36,18 +36,12 @@ html, body, [data-testid="stAppViewContainer"] {
 /* ─── WHITE LABEL (HIDE STREAMLIT) ───────────────────────── */
 #MainMenu { display: none !important; }
 footer { display: none !important; }
-header { display: none !important; }
-[data-testid="stHeader"] { display: none !important; }
+[data-testid="stHeader"] { background: rgba(0,0,0,0) !important; color: transparent !important; }
 [data-testid="stDecoration"] { display: none !important; }
 [data-testid="stToolbar"] { display: none !important; }
 [data-testid="stStatusWidget"] { display: none !important; }
 #stConnectionStatus { display: none !important; }
 .stDeployButton { display: none !important; }
-.viewerBadge { display: none !important; }
-div[class^="viewerBadge"] { display: none !important; }
-div[class*="viewerBadge"] { display: none !important; }
-button[title="View source code"] { display: none !important; }
-div[data-testid="stAppViewer"] header { display: none !important; }
 
 [data-testid="stSidebar"] {
   background: var(--surface) !important;
