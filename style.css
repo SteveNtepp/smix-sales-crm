@@ -36,11 +36,9 @@ html, body, [data-testid="stAppViewContainer"] {
 /* ─── WHITE LABEL (HIDE STREAMLIT) ───────────────────────── */
 #MainMenu { display: none !important; }
 footer { display: none !important; }
-[data-testid="stHeader"] { background: rgba(0,0,0,0) !important; color: transparent !important; }
+[data-testid="stHeader"] { background: rgba(0,0,0,0) !important; }
 [data-testid="stDecoration"] { display: none !important; }
 [data-testid="stToolbar"] { display: none !important; }
-[data-testid="stStatusWidget"] { display: none !important; }
-#stConnectionStatus { display: none !important; }
 .stDeployButton { display: none !important; }
 
 [data-testid="stSidebar"] {
