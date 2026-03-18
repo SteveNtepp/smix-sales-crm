@@ -236,7 +236,7 @@ def render_sidebar(user: dict):
         st.markdown("---")
         nav = [("dashboard","📊","Dashboard"),("leads","👥","Mes Leads"),
                ("bulk","🚀","Envoi Groupé"),
-               ("scripts","💬","Scripts WhatsApp"),("analytics","📈","Analytique"),
+               ("analytics","📈","Analytique"),
                ("resources","📚","Ressources")]
         if user["role"] == "admin":
             nav.append(("cockpit","⚙️","Cockpit Admin"))
@@ -629,82 +629,6 @@ def _lead_detail(lead_id: int, user: dict):
                 st.session_state.selected_lead = None; st.rerun()
 
 
-# ── SCRIPTS PAGE ──────────────────────────────────────────────────────────────
-
-def page_scripts(user: dict):
-    topbar(user)
-    st.markdown('<div class="section-header"><span class="accent">▶</span> Scripts WhatsApp</div>',
-                unsafe_allow_html=True)
-    is_admin = user["role"] == "admin"
-    df = db.get_leads(assigned_to=None if is_admin else user["username"])
-    if df.empty: st.info("Ajoutez d'abord un lead."); return
-    opts = {f"{r['name']} — {r['status']}": r["id"] for _,r in df.iterrows()}
-    sel  = st.selectbox("👤 Lead", list(opts.keys()))
-    lead = db.get_lead(opts[sel])
-    cfg = db.get_config()
-    scripts = db.get_scripts()
-    templates = db.get_script_templates()
-
-    tabs = st.tabs(["🟡 J+1","🔵 J+3","🔴 J+5","⚫ J+7", "📚 Modèles Scripts"])
-    
-    for dtab, day in zip(tabs[:4], ["J1","J3","J5","J7"]):
-        with dtab:
-            sd = scripts.get(day,{}); filled = inject_vars(
-                sd.get("content",""), lead.get("name",""), lead.get("goal",""),
-                cfg.get("price_promo","75 000 FCFA"), cfg.get("program_name",""),
-                cfg.get("start_date","18 Avril 2026"))
-            st.markdown(f"**{sd.get('title','')}**")
-            
-            att = sd.get("attachment_url", "")
-            final_filled = filled
-            if att:
-                abs_url = get_absolute_url(att)
-                st.markdown(f"📎 **Pièce jointe :** [Ouvrir]({abs_url})")
-                final_filled += f"\n\n📎 Pièce jointe : {abs_url}"
-                
-            st.markdown(f'<div class="script-card">{final_filled}</div>', unsafe_allow_html=True)
-            link = wa_link(lead.get("phone",""), final_filled)
-            st.markdown(f'<a href="{link}" target="_blank" class="wa-btn" style="margin-top:12px;display:inline-flex;">📲 Envoyer via WhatsApp</a>',
-                        unsafe_allow_html=True)
-            st.text_area("📋", value=final_filled, height=180, key=f"sc_pg_{day}", label_visibility="collapsed")
-            if st.button(f"✅ Marquer comme envoyé ({day})", key=f"log_{day}"):
-                if lead['status'] == 'Nouveau':
-                    db.update_lead(lead['id'], {**lead, 'status': 'Contacté'})
-                db.log_activity(user["username"], lead['id'], "WHATSAPP_SENT", f"Script {day}")
-                st.success("Activité enregistrée !"); st.rerun()
-
-    # --- TAB 5: Modèles Scripts ---
-    with tabs[4]:
-        if templates.empty:
-            st.info("Aucun modèle disponible.")
-        else:
-            for cat in templates["category"].unique():
-                st.markdown(f"**— {cat} —**")
-                cat_tpls = templates[templates["category"] == cat]
-                for _, tr in cat_tpls.iterrows():
-                    with st.expander(f"📄 {tr['name']}"):
-                        ft = inject_vars(tr["content"], lead.get("name",""), lead.get("goal",""),
-                                        cfg.get("price_promo","75 000 FCFA"),
-                                        cfg.get("program_name",""), cfg.get("start_date",""))
-                        
-                        att = tr.get("attachment_url", "")
-                        final_ft = ft
-                        if att:
-                            abs_url = get_absolute_url(att)
-                            st.markdown(f"📎 **Pièce jointe :** [Ouvrir]({abs_url})")
-                            final_ft += f"\n\n📎 Pièce jointe : {abs_url}"
-                            
-                        st.markdown(f'<div class="script-card">{final_ft}</div>', unsafe_allow_html=True)
-                        link = wa_link(lead.get("phone",""), final_ft)
-                        st.markdown(f'<a href="{link}" target="_blank" class="wa-btn" style="margin-top:10px;display:inline-flex;">📲 Envoyer via WhatsApp</a>',
-                                    unsafe_allow_html=True)
-                        tid = tr["id"]
-                        st.text_area("📋", value=final_ft, height=120, key=f"tpl_pg_{tid}", label_visibility="collapsed")
-                        if st.button(f"✅ Marquer comme envoyé", key=f"log_tpl_pg_{tid}"):
-                            if lead['status'] == 'Nouveau':
-                                db.update_lead(lead['id'], {**lead, 'status': 'Contacté'})
-                            db.log_activity(user["username"], lead['id'], "WHATSAPP_SENT", f"Modèle: {tr['name']}")
-                            st.success("Activité enregistrée !"); st.rerun()
 
 
 # ── BULK MESSAGING ────────────────────────────────────────────────────────────
@@ -1266,7 +1190,6 @@ def main():
     if page == "dashboard":   page_dashboard(user)
     elif page == "leads":     page_leads(user)
     elif page == "bulk":      page_bulk_messaging(user)
-    elif page == "scripts":   page_scripts(user)
     elif page == "analytics": page_analytics(user)
     elif page == "resources": page_resources(user)
     elif page == "cockpit" and user["role"] == "admin": page_cockpit_admin(user)
