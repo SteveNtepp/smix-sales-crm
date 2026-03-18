@@ -18,8 +18,10 @@ import database_handler as db
 
 # ── PAGE CONFIG ────────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="Smix Sales Assistant", page_icon="🎯",
-    layout="wide", initial_sidebar_state="expanded",
+    page_title="Smix Sales Assistant — Enterprise Edition", 
+    page_icon="🎯",
+    layout="wide", 
+    initial_sidebar_state="expanded",
 )
 
 @st.cache_resource

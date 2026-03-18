@@ -33,6 +33,15 @@ html, body, [data-testid="stAppViewContainer"] {
   color: var(--text) !important;
 }
 
+/* ─── WHITE LABEL (HIDE STREAMLIT) ───────────────────────── */
+#MainMenu { visibility: hidden; }
+footer { visibility: hidden; }
+header { visibility: hidden; }
+[data-testid="stDecoration"] { display: none; }
+[data-testid="stToolbar"] { display: none; }
+[data-testid="stStatusWidget"] { display: none; }
+#stConnectionStatus { display: none; }
+
 [data-testid="stSidebar"] {
   background: var(--surface) !important;
   border-right: 1px solid var(--border) !important;
