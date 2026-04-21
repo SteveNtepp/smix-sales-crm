@@ -1051,8 +1051,9 @@ def page_resources(user: dict):
     videos   = db.get_videos()
 
     # Build dynamic tabs: sections + videos tab
-    tab_labels = [f"{s['icon']} {s['title']}" for s in sections] + [t("resources_videos_tab")]
+    tab_labels = [f"{s['icon']} {t(s['title'])}" for s in sections] + [t("resources_videos_tab")]
     tabs = st.tabs(tab_labels)
+
 
     # Kit content sections
     for tab, section in zip(tabs[:-1], sections):
@@ -1079,7 +1080,8 @@ def page_resources(user: dict):
                             <div style="background:var(--surface2);border:1px solid var(--border);
                                         border-radius:10px;padding:14px;margin-bottom:12px;">
                               <div style="font-weight:700;color:var(--text);margin-bottom:4px;">
-                                🎬 {v['title']}</div>
+                                🎬 {t(v['title'])}</div>
+
                               <div style="font-size:.78rem;color:var(--text-muted);margin-bottom:10px;">
                                 {v['description']}</div>
                             </div>""", unsafe_allow_html=True)
@@ -1091,8 +1093,9 @@ def page_resources(user: dict):
 
 def page_cockpit_admin(user: dict):
     topbar(user)
-    st.markdown('<div class="section-header"><span class="accent">▶</span> Cockpit Admin</div>',
+    st.markdown(f'<div class="section-header"><span class="accent">▶</span> {t("cockpit_header")}</div>',
                 unsafe_allow_html=True)
+
     if user["role"] != "admin":
         st.error("🔒 Accès réservé."); return
 
@@ -1102,8 +1105,9 @@ def page_cockpit_admin(user: dict):
         t("cockpit_tab_scripts"), t("cockpit_tab_templates"),
         t("cockpit_tab_kit"), t("cockpit_tab_videos"),
         t("cockpit_tab_agents"), t("cockpit_tab_leaderboard"), t("cockpit_tab_invoices"),
-        "🛠️ Système"
+        t("cockpit_tab_system")
     ])
+
 
     cfg = db.get_config()
 

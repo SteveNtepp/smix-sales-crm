@@ -350,7 +350,8 @@ Sinon aucun souci, je resterai disponible pour la prochaine cohorte 🙏🏾""")
 def _seed_kit(conn):
     c = conn.cursor()
     sections = [
-        ("script_appel", "Script d'Appel", "📞", 0, """**SCRIPT D'APPEL (5 à 8 minutes max)**
+        ("script_appel", "kit_section_script", "📞", 0, """**SCRIPT D'APPEL (5 à 8 minutes max)**
+
 
 > Remarques importantes :
 > - Si le prospect est tiède/chaud, privilégier un appel court
@@ -414,7 +415,8 @@ Le vrai risque, c'est de rester encore quelques mois à publier / travailler / p
 Avec le CMA, tu repars avec : un cadre, des outils, une meilleure productivité, une compétence directement exploitable.
 Si tu es d'accord, je t'envoie tout de suite les numéros de paiement mobile pour bloquer ta place." """),
 
-        ("objections", "Objections & Réponses", "🛡️", 1, """**OBJECTIONS LES PLUS PROBABLES + RÉPONSES**
+        ("objections", "kit_section_objections", "🛡️", 1, """**OBJECTIONS LES PLUS PROBABLES + RÉPONSES**
+
 
 > Une objection n'est pas un refus. C'est souvent un besoin de réassurance.
 
@@ -478,7 +480,8 @@ Réponse : "Très bonne démarche. Je peux t'envoyer un message récapitulatif c
 
 Réponse : "C'est possible, mais 2 choses : le tarif actuel (75 000 FCFA) est exceptionnel, et le vrai coût c'est de rester encore plusieurs mois sans méthode. Si ton besoin est présent aujourd'hui, il peut être plus rentable d'agir maintenant." """),
 
-        ("criteres", "Critères de Qualification", "✅", 2, """**CRITÈRES DE QUALIFICATION D'UN PROSPECT**
+        ("criteres", "kit_section_criteria", "✅", 2, """**CRITÈRES DE QUALIFICATION D'UN PROSPECT**
+
 
 Logique en 3 niveaux : Lead froid | Lead tiède | Lead chaud
 
@@ -522,7 +525,8 @@ Logique en 3 niveaux : Lead froid | Lead tiède | Lead chaud
 
 "Nous ne vendons pas juste une formation en Community Management. Nous aidons les entrepreneurs et freelances à faire du digital un levier de croissance, de productivité et de revenus." """),
 
-        ("questions", "Questions de Qualification", "❓", 3, """**QUESTIONS DE QUALIFICATION (VERSION COURTE)**
+        ("questions", "kit_section_questions", "❓", 3, """**QUESTIONS DE QUALIFICATION (VERSION COURTE)**
+
 
 Les 5 meilleures questions à standardiser :
 
@@ -544,7 +548,8 @@ Les 5 meilleures questions à standardiser :
 
 Un bon pitch sans bonne qualification = perte de temps pour les deux parties. """),
 
-        ("interdits", "Les Interdits", "🚫", 4, """**CE QU'IL FAUT ABSOLUMENT ÉVITER**
+        ("interdits", "kit_section_forbidden", "🚫", 4, """**CE QU'IL FAUT ABSOLUMENT ÉVITER**
+
 
 ---
 
@@ -586,26 +591,37 @@ Utilise les scripts de relance pour chaque étape. """),
     for key, title, icon, order, content in sections:
         c.execute("""
             INSERT INTO kit_sections (section_key, title, icon, content, order_idx)
-            VALUES (%s, %s, %s, %s, %s) ON CONFLICT (section_key) DO NOTHING
+            VALUES (%s, %s, %s, %s, %s) 
+            ON CONFLICT (section_key) DO UPDATE 
+            SET title = EXCLUDED.title,
+                icon = EXCLUDED.icon,
+                content = EXCLUDED.content
         """, (key, title, icon, content, order))
+
     conn.commit()
 
 
 def _seed_videos(conn):
     c = conn.cursor()
     videos = [
-        ("Formation 1 — Community Manager Augmenté", "Introduction au programme CMA", "https://youtu.be/ZZ2mOsTRXJU?si=kngwJYrbpRhY88Do", 0),
-        ("Formation 2 — Stratégie Réseaux Sociaux",  "Stratégie et création de contenu", "https://youtu.be/Jeu_Kcx3aQo?si=3ppxZREntVPpk9t1", 1),
-        ("Formation 3 — Intelligence Artificielle",   "Utilisation de l'IA pour les CMs",  "https://youtu.be/kalJWpz0PcQ?si=_0Nf4QWazigUpNli", 2),
-        ("Formation 4 — Meta Ads Fondamentaux",       "Bases des publicités Meta Ads",      "https://youtu.be/aGI7puAXf6w?si=pMNiIjvvo6nqZ2dK", 3),
-        ("Formation 5 — Automatisation",              "Automatiser les tâches digitales",    "https://youtu.be/mt4AMRYTV3s?si=h7KUoJDBPSRCDy9b", 4),
-        ("Formation 6 — Monétisation",                "Monétiser ses compétences digitales", "https://youtu.be/Gh6FnldzR_k?si=2Oa1CY2gV4vlJvQ2", 5),
+        ("vid_title_1", "Introduction au programme CMA", "https://youtu.be/ZZ2mOsTRXJU?si=kngwJYrbpRhY88Do", 0),
+        ("vid_title_2", "Stratégie et création de contenu", "https://youtu.be/Jeu_Kcx3aQo?si=3ppxZREntVPpk9t1", 1),
+        ("vid_title_3", "Utilisation de l'IA pour les CMs",  "https://youtu.be/kalJWpz0PcQ?si=_0Nf4QWazigUpNli", 2),
+        ("vid_title_4", "Bases des publicités Meta Ads",      "https://youtu.be/aGI7puAXf6w?si=pMNiIjvvo6nqZ2dK", 3),
+        ("vid_title_5", "Automatiser les tâches digitales",    "https://youtu.be/mt4AMRYTV3s?si=h7KUoJDBPSRCDy9b", 4),
+        ("vid_title_6", "Monétiser ses compétences digitales", "https://youtu.be/Gh6FnldzR_k?si=2Oa1CY2gV4vlJvQ2", 5),
     ]
+
     for title, desc, url, order in videos:
         c.execute("""
             INSERT INTO videos (title, description, youtube_url, order_idx)
-            VALUES (%s, %s, %s, %s) ON CONFLICT DO NOTHING
+            VALUES (%s, %s, %s, %s) 
+            ON CONFLICT (youtube_url) DO UPDATE
+            SET title = EXCLUDED.title,
+                description = EXCLUDED.description,
+                order_idx = EXCLUDED.order_idx
         """, (title, desc, url, order))
+
     conn.commit()
 
 
@@ -721,26 +737,51 @@ def get_offer(offer_id: int) -> dict:
 
 
 def add_offer(data: dict) -> int:
-    """Insert a new offer and return its id."""
+    """Insert a new offer and return its id. Resilience added for missing tables."""
     clear_cache()
-    conn = get_connection()
-    with conn.cursor() as cur:
-        cur.execute("""
-            INSERT INTO offers (program_name, start_date, price_promo, price_standard, commission_rate, is_active)
-            VALUES (%(program_name)s, %(start_date)s, %(price_promo)s, %(price_standard)s, %(commission_rate)s, %(is_active)s)
-            RETURNING id
-        """, {
-            "program_name":   data.get("program_name", ""),
-            "start_date":     data.get("start_date", ""),
-            "price_promo":    data.get("price_promo", ""),
-            "price_standard": data.get("price_standard", ""),
-            "commission_rate": float(data.get("commission_rate", 10)),
-            "is_active":      bool(data.get("is_active", True)),
-        })
-        oid = cur.fetchone()["id"]
-    conn.commit()
-    conn.close()
-    return oid
+    try:
+        conn = get_connection()
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO offers (program_name, start_date, price_promo, price_standard, commission_rate, is_active)
+                VALUES (%(program_name)s, %(start_date)s, %(price_promo)s, %(price_standard)s, %(commission_rate)s, %(is_active)s)
+                RETURNING id
+            """, {
+                "program_name":   data.get("program_name", ""),
+                "start_date":     data.get("start_date", ""),
+                "price_promo":    data.get("price_promo", ""),
+                "price_standard": data.get("price_standard", ""),
+                "commission_rate": float(data.get("commission_rate", 10)),
+                "is_active":      bool(data.get("is_active", True)),
+            })
+            oid = cur.fetchone()["id"]
+        conn.commit()
+        conn.close()
+        return oid
+    except Exception as e:
+        if "offers" in str(e).lower() and "does not exist" in str(e).lower():
+            init_db()
+            # Retry once
+            conn = get_connection()
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO offers (program_name, start_date, price_promo, price_standard, commission_rate, is_active)
+                    VALUES (%(program_name)s, %(start_date)s, %(price_promo)s, %(price_standard)s, %(commission_rate)s, %(is_active)s)
+                    RETURNING id
+                """, {
+                    "program_name":   data.get("program_name", ""),
+                    "start_date":     data.get("start_date", ""),
+                    "price_promo":    data.get("price_promo", ""),
+                    "price_standard": data.get("price_standard", ""),
+                    "commission_rate": float(data.get("commission_rate", 10)),
+                    "is_active":      bool(data.get("is_active", True)),
+                })
+                oid = cur.fetchone()["id"]
+            conn.commit()
+            conn.close()
+            return oid
+        raise e
+
 
 
 def update_offer(offer_id: int, data: dict):

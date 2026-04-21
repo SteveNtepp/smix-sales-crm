@@ -97,6 +97,20 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     "cat_welcome":              {"fr": "Bienvenue",                         "en": "Welcome"},
     "cat_custom":               {"fr": "Personnalisé",                      "en": "Custom"},
 
+    # Kit & Videos
+    "kit_section_script":       {"fr": "📞 Script d'Appel",                 "en": "📞 Call Script"},
+    "kit_section_objections":   {"fr": "🛡️ Objections & Réponses",          "en": "🛡️ Objections & Answers"},
+    "kit_section_criteria":     {"fr": "✅ Critères de Qualification",       "en": "✅ Qualification Criteria"},
+    "kit_section_questions":    {"fr": "❓ Questions de Qualification",      "en": "❓ Qualification Questions"},
+    "kit_section_forbidden":    {"fr": "🚫 Les Interdits",                  "en": "🚫 Forbidden/Don'ts"},
+    "resources_videos_tab":     {"fr": "🎬 Formations Vidéo",                "en": "🎬 Video Trainings"},
+    "vid_title_1":              {"fr": "Formation 1 — Introduction",        "en": "Training 1 — Introduction"},
+    "vid_title_2":              {"fr": "Formation 2 — Stratégie",           "en": "Training 2 — Strategy"},
+    "vid_title_3":              {"fr": "Formation 3 — Création de Contenu", "en": "Training 3 — Content Creation"},
+    "vid_title_4":              {"fr": "Formation 4 — Meta Ads",            "en": "Training 4 — Meta Ads"},
+    "vid_title_5":              {"fr": "Formation 5 — Automatisation",      "en": "Training 5 — Automation"},
+    "vid_title_6":              {"fr": "Formation 6 — Monétisation",        "en": "Training 6 — Monetization"},
+
 
     # ── LEADS PAGE ────────────────────────────────────────────────────────────
     "leads_header":             {"fr": "Gestion des Leads",                 "en": "Lead Management"},
@@ -226,7 +240,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     "cockpit_tab_videos":       {"fr": "🎬 Vidéos",                         "en": "🎬 Videos"},
     "cockpit_tab_agents":       {"fr": "👥 Agents",                         "en": "👥 Agents"},
     "cockpit_tab_leaderboard":  {"fr": "📊 Leaderboard & Export",           "en": "📊 Leaderboard & Export"},
-    "cockpit_tab_invoices":     {"fr": "🧾 Factures",                       "en": "🧾 Invoices"},
+    "cockpit_tab_invoices":     {"fr": "🧾 Facturation",                  "en": "🧾 Invoicing"},
+    "cockpit_tab_system":       {"fr": "🛠️ Système",                      "en": "🛠️ System"},
     # Offers CRUD
     "offers_add_title":         {"fr": "➕ Créer une offre",                "en": "➕ Create an offer"},
     "offers_list_title":        {"fr": "**Offres existantes**",             "en": "**Existing offers**"},
