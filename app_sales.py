@@ -922,12 +922,7 @@ def page_bulk_messaging(user: dict):
         if st.button(t("bulk_restart")):
             st.session_state.bulk_leads_ids = []; st.session_state.bulk_idx = 0; st.rerun()
 
-    else:
-        st.success(f"🎉 Campagne terminée ! {total_leads} prospects ont été passés en revue.")
-        if st.button("Recommencer une nouvelle campagne"):
-            st.session_state.bulk_leads_ids = []
-            st.session_state.bulk_idx = 0
-            st.rerun()
+
 
 
 # ── ANALYTICS ─────────────────────────────────────────────────────────────────
