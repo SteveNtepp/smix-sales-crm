@@ -7,11 +7,9 @@
 
 /* ─── TOKENS ─────────────────────────────────────────────── */
 :root {
-  /* Default Dark Mode */
   --midnight:      #060916;
   --surface:       #0C1128;
   --surface2:      #121830;
-  --surface3:      #1A2242;
   --border:        #1C2242;
   --purple:        #5e17eb;
   --purple-light:  #9B59FF;
@@ -27,24 +25,6 @@
   --radius:        12px;
   --shadow:        0 4px 24px rgba(0,0,0,.5);
 }
-
-/* Light Mode Overrides */
-[data-theme="light"] {
-  --midnight:      #F8FAFC;
-  --surface:       #FFFFFF;
-  --surface2:      #F1F5F9;
-  --surface3:      #E2E8F0;
-  --border:        #CBD5E1;
-  --purple:        #4F11C8; /* Slightly deeper for light mode */
-  --purple-light:  #5e17eb;
-  --purple-glow:   #7C3AED;
-  --purple-dim:    #3D0E9E;
-  --purple-faint:  rgba(94,23,235,0.08);
-  --text:          #0F172A;
-  --text-muted:    #475569;
-  --shadow:        0 4px 20px rgba(0,0,0,.08);
-}
-
 
 /* ─── BASE ───────────────────────────────────────────────── */
 html, body, [data-testid="stAppViewContainer"] {
@@ -75,15 +55,9 @@ footer { display: none !important; }
   border-right: 1px solid var(--border) !important;
 }
 
-[data-theme="light"] [data-testid="stSidebar"] {
-  background: #F1F5F9 !important;
-  border-right: 1px solid #E2E8F0 !important;
-}
-
 [data-testid="stSidebar"] * {
   color: var(--text) !important;
 }
-
 
 /* ─── TOP BAR ────────────────────────────────────────────── */
 .smix-topbar {
@@ -223,11 +197,6 @@ footer { display: none !important; }
   top: 14px; right: 14px;
   opacity: .15;
 }
-
-[data-theme="light"] .metric-icon {
-  opacity: .25;
-}
-
 
 /* ─── TOP CLOSER BANNER ──────────────────────────────────── */
 .top-closer-banner {

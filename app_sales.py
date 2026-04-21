@@ -39,29 +39,14 @@ def load_css():
 
 # ── INIT & BRANDING ────────────────────────────────────────────────────────────
 initialize_db()
-if "theme" not in st.session_state: st.session_state.theme = "dark"
-
-def apply_styling():
-    p = os.path.join(os.path.dirname(__file__), "style.css")
-    if os.path.exists(p):
-        with open(p, "r") as f:
-            css = f.read()
-            st.markdown(f"""<style>{css}</style>
-            <script>
-                var root = window.parent.document.querySelector('html');
-                if (root) {{ root.setAttribute('data-theme', '{st.session_state.theme}'); }}
-            </script>
-            """, unsafe_allow_html=True)
-
-apply_styling()
-
+CSS_CONTENT = load_css()
+st.markdown(f"<style>{CSS_CONTENT}</style>", unsafe_allow_html=True)
 
 # ── SESSION STATE ──────────────────────────────────────────────────────────────
 for k, v in {"authenticated": False, "user": None, "page": "dashboard",
-              "selected_lead": None, "show_add_lead": False, "lang": "fr", "theme": "dark"}.items():
+              "selected_lead": None, "show_add_lead": False, "lang": "fr"}.items():
     if k not in st.session_state:
         st.session_state[k] = v
-
 
 # ── CONSTANTS (INTERNAL DB VALUES & KEYS) ──────────────────────────────────────
 STATUSES = ["Nouveau","Contacté","Qualifié","Relance","Paiement en attente","Inscrit/Soldé","Perdu"]
@@ -299,20 +284,11 @@ def render_sidebar(user: dict):
           <div style="font-size:.7rem;color:var(--text-muted);">Sales Assistant</div>
         </div>""", unsafe_allow_html=True)
 
-        # Appearance & Language
-        c1, c2 = st.columns(2)
-        with c1:
-            if st.button(t("lang_toggle_label").split(" ")[0], key="lang_sidebar", use_container_width=True):
-                st.session_state.lang = "en" if st.session_state.lang == "fr" else "fr"
-                st.rerun()
-        with c2:
-            current_theme = st.session_state.theme
-            theme_icon = "☀️" if current_theme == "dark" else "🌙"
-            if st.button(theme_icon, key="theme_sidebar", use_container_width=True):
-                st.session_state.theme = "light" if current_theme == "dark" else "dark"
-                st.rerun()
+        # Language toggle
+        if st.button(t("lang_toggle_label"), key="lang_sidebar", use_container_width=True):
+            st.session_state.lang = "en" if st.session_state.lang == "fr" else "fr"
+            st.rerun()
         st.markdown("---")
-
 
         nav = [("dashboard", t("nav_dashboard")),
 
@@ -831,7 +807,6 @@ def page_bulk_messaging(user: dict):
 
     st.markdown("---")
     st.markdown(t("bulk_step3"))
-
     
     # Session state for stabilization
     if "bulk_leads_ids" not in st.session_state:
@@ -978,9 +953,6 @@ def page_analytics(user: dict):
                   </div>
                 </div>""", unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
-
-
-
 
     if df.empty:
         st.info(t("analytics_no_data")); return

@@ -16,10 +16,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     "login_password":           {"fr": "🔒 Mot de passe",                   "en": "🔒 Password"},
     "login_btn":                {"fr": "🚀 Se connecter",                   "en": "🚀 Log in"},
     "login_error":              {"fr": "❌ Identifiants incorrects ou compte inactif.", "en": "❌ Incorrect credentials or inactive account."},
-    "lang_toggle_label":        {"fr": "🇺🇸 Switch to English",              "en": "🇫🇷 Passer au Français"},
-    "theme_label":              {"fr": "🌓 Thème Apparence",                "en": "🌓 App Appearance"},
-    "theme_dark":               {"fr": "Sombre",                          "en": "Dark"},
-    "theme_light":              {"fr": "Clair",                           "en": "Light"},
+    "lang_toggle_label":        {"fr": "🌐 EN",                             "en": "🌐 FR"},
 
     # ── SIDEBAR ───────────────────────────────────────────────────────────────
     "nav_label":                {"fr": "**🗺️ Navigation**",                 "en": "**🗺️ Navigation**"},
