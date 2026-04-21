@@ -61,6 +61,7 @@ def init_db():
     conn = get_connection()
     c = conn.cursor()
 
+    # Users
     c.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id         SERIAL PRIMARY KEY,
@@ -72,16 +73,18 @@ def init_db():
             created_at TIMESTAMP DEFAULT NOW()
         )
     """)
+    conn.commit()
 
-    
-
+    # Config
     c.execute("""
         CREATE TABLE IF NOT EXISTS config (
             key   TEXT PRIMARY KEY,
             value TEXT
         )
     """)
+    conn.commit()
 
+    # Scripts
     c.execute("""
         CREATE TABLE IF NOT EXISTS scripts (
             day     TEXT PRIMARY KEY,
@@ -89,7 +92,9 @@ def init_db():
             content TEXT
         )
     """)
+    conn.commit()
 
+    # Script Templates
     c.execute("""
         CREATE TABLE IF NOT EXISTS script_templates (
             id         SERIAL PRIMARY KEY,
@@ -100,7 +105,9 @@ def init_db():
             created_at TIMESTAMP DEFAULT NOW()
         )
     """)
+    conn.commit()
 
+    # Kit Sections
     c.execute("""
         CREATE TABLE IF NOT EXISTS kit_sections (
             id          SERIAL PRIMARY KEY,
@@ -111,7 +118,9 @@ def init_db():
             order_idx   INTEGER DEFAULT 0
         )
     """)
+    conn.commit()
 
+    # Videos
     c.execute("""
         CREATE TABLE IF NOT EXISTS videos (
             id          SERIAL PRIMARY KEY,
@@ -123,7 +132,9 @@ def init_db():
             created_at  TIMESTAMP DEFAULT NOW()
         )
     """)
+    conn.commit()
 
+    # Leads
     c.execute("""
         CREATE TABLE IF NOT EXISTS leads (
             id               SERIAL PRIMARY KEY,
@@ -152,7 +163,9 @@ def init_db():
             updated_at       TIMESTAMP DEFAULT NOW()
         )
     """)
+    conn.commit()
 
+    # Activity Log
     c.execute("""
         CREATE TABLE IF NOT EXISTS activity_log (
             id         SERIAL PRIMARY KEY,
@@ -163,7 +176,9 @@ def init_db():
             created_at TIMESTAMP DEFAULT NOW()
         )
     """)
+    conn.commit()
 
+    # Invoices
     c.execute("""
         CREATE TABLE IF NOT EXISTS invoices (
             id             SERIAL PRIMARY KEY,
@@ -176,7 +191,9 @@ def init_db():
             created_at     TIMESTAMP DEFAULT NOW()
         )
     """)
+    conn.commit()
 
+    # Notifications
     c.execute("""
         CREATE TABLE IF NOT EXISTS notifications (
             id           SERIAL PRIMARY KEY,
@@ -188,7 +205,9 @@ def init_db():
             created_at   TIMESTAMP DEFAULT NOW()
         )
     """)
+    conn.commit()
 
+    # Offers
     c.execute("""
         CREATE TABLE IF NOT EXISTS offers (
             id              SERIAL PRIMARY KEY,
@@ -201,16 +220,19 @@ def init_db():
             created_at      TIMESTAMP DEFAULT NOW()
         )
     """)
+    conn.commit()
 
     # Schema Migrations
-    try:
-        c.execute("ALTER TABLE scripts ADD COLUMN IF NOT EXISTS attachment_url TEXT")
-        c.execute("ALTER TABLE script_templates ADD COLUMN IF NOT EXISTS attachment_url TEXT")
-        c.execute("ALTER TABLE leads ADD COLUMN IF NOT EXISTS offer_id INTEGER REFERENCES offers(id) ON DELETE SET NULL")
-        conn.commit()
-    except Exception as e:
-        conn.rollback()
-        pass
+    for mig in [
+        "ALTER TABLE scripts ADD COLUMN IF NOT EXISTS attachment_url TEXT",
+        "ALTER TABLE script_templates ADD COLUMN IF NOT EXISTS attachment_url TEXT",
+        "ALTER TABLE leads ADD COLUMN IF NOT EXISTS offer_id INTEGER REFERENCES offers(id) ON DELETE SET NULL"
+    ]:
+        try:
+            c.execute(mig)
+            conn.commit()
+        except Exception:
+            conn.rollback()
 
     _seed_users(conn)
     _seed_config(conn)
@@ -218,6 +240,7 @@ def init_db():
     _seed_kit(conn)
     _seed_videos(conn)
     conn.close()
+
 
 
 # ── SEEDS ──────────────────────────────────────────────────────────────────────

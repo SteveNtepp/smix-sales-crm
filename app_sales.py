@@ -306,12 +306,9 @@ def render_sidebar(user: dict):
                 st.rerun()
 
         st.markdown("---")
-        if st.button(t("sidebar_logout"), key="logout_btn", use_container_width=True):
-            st.session_state.authenticated = False
-            st.session_state.user = None
-            st.rerun()
 
-        st.markdown("---")
+        # Active offer: prefer first active offer, fall back to config
+
 
         # Active offer: prefer first active offer, fall back to config
         offers = db.get_offers()
@@ -1086,17 +1083,8 @@ def page_resources(user: dict):
                               <div style="font-size:.78rem;color:var(--text-muted);margin-bottom:10px;">
                                 {v['description']}</div>
                             </div>""", unsafe_allow_html=True)
-                            st.video(v["url"])
-
-                            st.markdown(f"""
-                            <div style="background:var(--surface2);border:1px solid var(--border);
-                                        border-radius:10px;padding:14px;margin-bottom:12px;">
-                              <div style="font-weight:700;color:var(--text);margin-bottom:4px;">
-                                🎬 {v['title']}</div>
-                              <div style="font-size:.78rem;color:var(--text-muted);margin-bottom:10px;">
-                                {v['description']}</div>
-                            </div>""", unsafe_allow_html=True)
                             embed_youtube(v["youtube_url"])
+
 
 
 # ── COCKPIT ADMIN ─────────────────────────────────────────────────────────────
