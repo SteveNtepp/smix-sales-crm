@@ -307,22 +307,12 @@ def render_sidebar(user: dict):
 
         st.markdown("---")
 
-        # Active offer: prefer first active offer, fall back to config
+        # Active offer: simple config-based view (legacy restore)
+        cfg = db.get_config()
+        prog_name   = cfg.get("program_name", "—")
+        start_date  = cfg.get("start_date", "—")
+        price_promo = cfg.get("price_promo", "—")
 
-
-        # Active offer: prefer first active offer, fall back to config
-        offers = db.get_offers()
-        active_offers = [o for o in offers if o.get("is_active")]
-        if active_offers:
-            ao = active_offers[0]
-            prog_name   = ao.get("program_name", "—")
-            start_date  = ao.get("start_date", "—")
-            price_promo = ao.get("price_promo", "—")
-        else:
-            cfg = db.get_config()
-            prog_name   = cfg.get("program_name", "—")
-            start_date  = cfg.get("start_date", "—")
-            price_promo = cfg.get("price_promo", "—")
         st.markdown(f"""
         <div style="background:var(--surface2);border-radius:8px;padding:12px;border:1px solid var(--border);">
           <div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">{t('sidebar_active_prog')}</div>
@@ -330,6 +320,7 @@ def render_sidebar(user: dict):
           <div style="font-size:.75rem;color:var(--purple-light);margin-top:4px;">{t('sidebar_start')} {start_date}</div>
           <div style="font-size:.75rem;color:var(--text-muted);">{t('sidebar_promo')} {price_promo} {t('sidebar_promo_label')}</div>
         </div>""", unsafe_allow_html=True)
+
 
         st.markdown("---")
         if st.button(t("sidebar_logout"), use_container_width=True):
@@ -519,10 +510,6 @@ def page_leads(user: dict):
 
 def _add_lead_form(user: dict, is_admin: bool):
     with st.expander(t("add_lead_title"), expanded=True):
-        # Load offers for selectbox
-        all_offers = db.get_offers()
-        offer_labels = [t("field_offer_none")] + [f"{o['program_name']} ({o.get('price_promo','')})" for o in all_offers]
-        offer_ids    = [None] + [o["id"] for o in all_offers]
         with st.form("add_lead_form", clear_on_submit=True):
             c1, c2 = st.columns(2)
             with c1:
@@ -541,8 +528,6 @@ def _add_lead_form(user: dict, is_admin: bool):
             with m1: camp = st.text_input(t("field_campaign"))
             with m2: adst = st.text_input(t("field_adset"))
             with m3: crea = st.text_input(t("field_creative"))
-            # Offer selectbox
-            offer_idx = st.selectbox(t("field_offer"), range(len(offer_labels)), format_func=lambda i: offer_labels[i])
             c3, c4 = st.columns(2)
             with c3:
                 if is_admin:
@@ -560,13 +545,12 @@ def _add_lead_form(user: dict, is_admin: bool):
             if not name or not phone:
                 st.error(t("err_name_phone"))
             else:
-                selected_offer_id = offer_ids[offer_idx]
                 lid = db.add_lead({"name":name,"phone":phone,"email":email,"assigned_to":ato,
                     "status":"Nouveau","goal":goal,"profile_type":ptype,"urgency":urg,
                     "budget_confirmed":int(bconf),"available":int(avail),"fast_response":int(fast),
                     "campaign":camp,"adset":adst,"creative":crea,"notes":notes,
                     "last_contact":str(date.today()),
-                    "follow_up_date":str(fu_date) if fu_date else "","offer_id": selected_offer_id})
+                    "follow_up_date":str(fu_date) if fu_date else "","offer_id": None})
                 db.log_activity(user["username"], lid, "CREATED", f"Lead {name}")
                 st.success(t("success_lead_added").format(f"**{name}**"))
                 st.session_state.show_add_lead = False; st.rerun()
@@ -577,15 +561,10 @@ def _lead_detail(lead_id: int, user: dict):
     if not lead: st.error(t("err_lead_not_found")); return
     cfg = db.get_config(); scripts = db.get_scripts(); templates = db.get_script_templates()
 
-    # Get offer info for variable injection
-    off_data = None
-    if lead.get("offer_id"):
-        off_data = db.get_offer(lead["offer_id"])
-    
-    # Fallback to global config if no offer or missing fields
-    prog_name = off_data.get("program_name") if off_data else cfg.get("program_name", "")
-    p_promo   = off_data.get("price_promo") if off_data else cfg.get("price_promo", "")
-    s_date    = off_data.get("start_date") if off_data else cfg.get("start_date", "")
+    # Fallback to global config
+    prog_name = cfg.get("program_name", "")
+    p_promo   = cfg.get("price_promo", "")
+    s_date    = cfg.get("start_date", "")
 
     st.markdown(f"### 👤 {lead['name']} — {t('detail_title')}")
     t1,t2,t3,t4,t5 = st.tabs([
@@ -603,10 +582,6 @@ def _lead_detail(lead_id: int, user: dict):
             st.markdown(f"👤 {lead.get('profile_type') or '—'}  |  ⏰ {lead.get('urgency') or '—'}")
             lbl,_,_ = fu_label(str(lead.get("follow_up_date","") or ""))
             st.markdown(f"{t('detail_relance')} **{lbl}**")
-            if lead.get("offer_id") and off_data:
-                st.markdown(f"{t('detail_offer_label')} **{off_data['program_name']}** ({off_data.get('price_promo','')})")
-            else:
-                st.markdown(f"{t('detail_offer_label')} {t('detail_no_offer')}")
         with c2:
             st.markdown(t("detail_score"))
             render_score_bar(lead.get("score",0), t(TEMP_KEYS.get(lead.get("temperature",""), lead.get("temperature","❄️ Froid"))))
@@ -622,7 +597,7 @@ def _lead_detail(lead_id: int, user: dict):
         
         if lead.get("status") == "Inscrit/Soldé":
             amt = float(lead.get("amount_paid") or 0)
-            comm_rate = float(off_data.get("commission_rate", 10)) if off_data else float(cfg.get("commission_rate", 10))
+            comm_rate = float(cfg.get("commission_rate", 10))
             comm_val = int(amt * comm_rate / 100)
             st.markdown(f"""<div class="commission-badge" style="margin-top:12px;">
               <div class="commission-label">{t('detail_commission_gen')}</div>
@@ -688,11 +663,6 @@ def _lead_detail(lead_id: int, user: dict):
                             st.success(t("success_activity_logged")); st.rerun()
 
     with t4:
-        all_offers_e = db.get_offers()
-        offer_labels_e = [t("field_offer_none")] + [f"{o['program_name']} ({o.get('price_promo','')})" for o in all_offers_e]
-        offer_ids_e    = [None] + [o["id"] for o in all_offers_e]
-        cur_offer_id = lead.get("offer_id")
-        cur_offer_idx = next((i for i,oid in enumerate(offer_ids_e) if oid == cur_offer_id), 0)
         with st.form(f"edit_{lead_id}"):
             c1,c2 = st.columns(2)
             with c1:
@@ -720,7 +690,6 @@ def _lead_detail(lead_id: int, user: dict):
                         if parsed_date >= date.today(): efd = parsed_date
                     except: pass
                 e_fu_date = st.date_input(t("field_followup_date"), value=efd, min_value=date.today(), format="DD/MM/YYYY")
-            e_offer_idx = st.selectbox(t("field_offer"), range(len(offer_labels_e)), index=cur_offer_idx, format_func=lambda i: offer_labels_e[i])
             m1,m2,m3 = st.columns(3)
             with m1: e_camp = st.text_input(t("field_campaign"), value=lead.get("campaign","") or "")
             with m2: e_adst = st.text_input(t("field_adset"),    value=lead.get("adset","") or "")
@@ -735,14 +704,13 @@ def _lead_detail(lead_id: int, user: dict):
             e_notes = st.text_area(t("field_notes"), value=lead.get("notes","") or "")
             e_save  = st.form_submit_button(t("btn_update"), use_container_width=True, type="primary")
         if e_save:
-            e_offer_id = offer_ids_e[e_offer_idx]
             db.update_lead(lead_id, {"name":e_name,"phone":e_phone,"email":e_email,"assigned_to":e_ato,
                 "status":e_status,"goal":e_goal,"profile_type":e_ptype,"urgency":e_urg,
                 "budget_confirmed":int(e_bconf),"available":int(e_avail),"fast_response":int(e_fast),
                 "amount_paid":e_amount,"campaign":e_camp,"adset":e_adst,"creative":e_crea,
                 "notes":e_notes,"last_contact":str(date.today()),
                 "follow_up_date":str(e_fu_date) if e_fu_date else "",
-                "offer_id": e_offer_id})
+                "offer_id": None})
             db.log_activity(user["username"], lead_id, "UPDATED", f"Statut → {e_status}")
             st.success(t("detail_updated")); st.rerun()
         if user["role"] == "admin":
@@ -867,16 +835,10 @@ def page_bulk_messaging(user: dict):
         if not lead_data:
             st.session_state.bulk_idx += 1; st.rerun()
 
-        # Prepare message with Offer/Config fallback
+        # Prepare message with Config fallback
         prog_name = cfg.get("program_name", "")
         p_promo   = cfg.get("price_promo", "")
         s_date    = cfg.get("start_date", "")
-        if lead_data.get("offer_id"):
-            off_d = db.get_offer(lead_data["offer_id"])
-            if off_d:
-                prog_name = off_d.get("program_name", prog_name)
-                p_promo   = off_d.get("price_promo", p_promo)
-                s_date    = off_d.get("start_date", s_date)
 
         filled = inject_vars(sel_tpl_content, str(lead_data["name"]), str(lead_data.get("goal","")),
                              p_promo, prog_name, s_date)
@@ -1100,8 +1062,8 @@ def page_cockpit_admin(user: dict):
         st.error("🔒 Accès réservé."); return
 
 
-    t_offers,t1,t2,t3,t4,t5,t6,t7,t8,t_sys = st.tabs([
-        t("cockpit_tab_offers"), t("cockpit_tab_config"),
+    t1,t2,t3,t4,t5,t6,t7,t8,t_sys = st.tabs([
+        t("cockpit_tab_config"),
         t("cockpit_tab_scripts"), t("cockpit_tab_templates"),
         t("cockpit_tab_kit"), t("cockpit_tab_videos"),
         t("cockpit_tab_agents"), t("cockpit_tab_leaderboard"), t("cockpit_tab_invoices"),
@@ -1109,30 +1071,9 @@ def page_cockpit_admin(user: dict):
     ])
 
 
+
     cfg = db.get_config()
 
-    # ── Offers CRUD
-    with t_offers:
-        st.markdown(f"#### {t('offers_add_title')}")
-        with st.form("new_offer_form", clear_on_submit=True):
-            c1, c2 = st.columns(2)
-            with c1:
-                n_prog  = st.text_input(t("offers_field_prog"),       placeholder="Community Manager Augmenté")
-                n_start = st.text_input(t("offers_field_start"),      placeholder="18 Avril 2026")
-                n_promo = st.text_input(t("offers_field_promo"),      placeholder="75 000 FCFA")
-            with c2:
-                n_std   = st.text_input(t("offers_field_std"),        placeholder="100 000 FCFA")
-                n_comm  = st.number_input(t("offers_field_commission"), value=10.0, step=0.5, min_value=0.0, max_value=100.0)
-                n_active= st.checkbox(t("offers_active"), value=True)
-            add_offer_btn = st.form_submit_button(t("offers_btn_add"), type="primary", use_container_width=True)
-        if add_offer_btn:
-            if not n_prog:
-                st.error(t("offers_err_prog"))
-            else:
-                db.add_offer({"program_name": n_prog, "start_date": n_start,
-                              "price_promo": n_promo, "price_standard": n_std,
-                              "commission_rate": n_comm, "is_active": n_active})
-                st.success(t("offers_success_add")); st.rerun()
 
         st.markdown("---")
         st.markdown(t("offers_list_title"))

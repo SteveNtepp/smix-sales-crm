@@ -1118,45 +1118,20 @@ def get_upcoming_followups(assigned_to: str = None) -> pd.DataFrame:
 
 @st.cache_data(ttl=300)
 def get_team_stats() -> pd.DataFrame:
-    """Per-agent stats, using each lead's offer commission_rate (falls back to global 10%)."""
-    try:
-        conn = get_connection()
-        df = pd.read_sql_query("""
-            SELECT
-                l.assigned_to AS agent,
-                COUNT(*) AS total_leads,
-                SUM(CASE WHEN l.status='Inscrit/Soldé' THEN 1 ELSE 0 END) AS closed,
-                SUM(CASE WHEN l.status='Perdu'         THEN 1 ELSE 0 END) AS lost,
-                SUM(CASE WHEN l.status='Nouveau'       THEN 1 ELSE 0 END) AS new_leads,
-                COALESCE(SUM(CASE WHEN l.status='Inscrit/Soldé' THEN l.amount_paid ELSE 0 END), 0) AS revenue,
-                ROUND(CAST(
-                    COALESCE(SUM(
-                        CASE WHEN l.status='Inscrit/Soldé'
-                        THEN l.amount_paid * COALESCE(o.commission_rate, 10) / 100.0
-                        ELSE 0 END
-                    ), 0)
-                AS NUMERIC), 0) AS commission
-            FROM leads l
-            LEFT JOIN offers o ON o.id = l.offer_id
-            GROUP BY l.assigned_to
-        """, get_engine())
-        conn.close()
-    except Exception:
-        # Fallback if offers table doesn't exist
-        conn = get_connection()
-        df = pd.read_sql_query("""
-            SELECT
-                assigned_to AS agent,
-                COUNT(*) AS total_leads,
-                SUM(CASE WHEN status='Inscrit/Soldé' THEN 1 ELSE 0 END) AS closed,
-                SUM(CASE WHEN status='Perdu'         THEN 1 ELSE 0 END) AS lost,
-                SUM(CASE WHEN status='Nouveau'       THEN 1 ELSE 0 END) AS new_leads,
-                COALESCE(SUM(CASE WHEN status='Inscrit/Soldé' THEN amount_paid ELSE 0 END), 0) AS revenue,
-                ROUND(CAST(COALESCE(SUM(CASE WHEN status='Inscrit/Soldé' THEN amount_paid * 0.1 ELSE 0 END), 0) AS NUMERIC), 0) AS commission
-            FROM leads
-            GROUP BY assigned_to
-        """, get_engine())
-        conn.close()
+    """Per-agent stats using flat 10% commission (Legacy Restore)."""
+    engine = get_engine()
+    df = pd.read_sql_query("""
+        SELECT
+            assigned_to AS agent,
+            COUNT(*) AS total_leads,
+            SUM(CASE WHEN status='Inscrit/Soldé' THEN 1 ELSE 0 END) AS closed,
+            SUM(CASE WHEN status='Perdu'         THEN 1 ELSE 0 END) AS lost,
+            SUM(CASE WHEN status='Nouveau'       THEN 1 ELSE 0 END) AS new_leads,
+            COALESCE(SUM(CASE WHEN status='Inscrit/Soldé' THEN amount_paid ELSE 0 END), 0) AS revenue,
+            ROUND(CAST(COALESCE(SUM(CASE WHEN status='Inscrit/Soldé' THEN amount_paid * 0.1 ELSE 0 END), 0) AS NUMERIC), 0) AS commission
+        FROM leads
+        GROUP BY assigned_to
+    """, engine)
 
     if not df.empty:
         df["conversion_rate"] = df.apply(
@@ -1165,35 +1140,19 @@ def get_team_stats() -> pd.DataFrame:
     return df
 
 
-
 def get_agent_commission(username: str) -> float:
-    """Commission for a specific agent using per-offer rate (default 10%)."""
-    try:
-        conn = get_connection()
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT COALESCE(SUM(
-                    l.amount_paid * COALESCE(o.commission_rate, 10) / 100.0
-                ), 0) AS commission
-                FROM leads l
-                LEFT JOIN offers o ON o.id = l.offer_id
-                WHERE l.assigned_to=%s AND l.status='Inscrit/Soldé'
-            """, (username,))
-            row = cur.fetchone()
-        conn.close()
-        return float(row["commission"]) if row else 0.0
-    except Exception:
-        # Fallback if offers table doesn't exist
-        conn = get_connection()
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT COALESCE(SUM(amount_paid * 0.1), 0) AS commission
-                FROM leads
-                WHERE assigned_to=%s AND status='Inscrit/Soldé'
-            """, (username,))
-            row = cur.fetchone()
-        conn.close()
-        return float(row["commission"]) if row else 0.0
+    """Commission for a specific agent using flat 10% rate (Legacy Restore)."""
+    conn = get_connection()
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT COALESCE(SUM(amount_paid * 0.1), 0) AS commission
+            FROM leads
+            WHERE assigned_to=%s AND status='Inscrit/Soldé'
+        """, (username,))
+        row = cur.fetchone()
+    conn.close()
+    return float(row["commission"]) if row else 0.0
+
 
 
 
