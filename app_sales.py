@@ -1075,35 +1075,8 @@ def page_cockpit_admin(user: dict):
     cfg = db.get_config()
 
 
-        st.markdown("---")
-        st.markdown(t("offers_list_title"))
-        existing_offers = db.get_offers()
-        if not existing_offers:
-            st.info(t("offers_no_offers"))
-        else:
-            for off in existing_offers:
-                status_lbl = t("offers_active") if off.get("is_active") else t("offers_inactive")
-                with st.expander(f"{status_lbl} — {off['program_name']} | {off.get('price_promo','—')} | {off.get('commission_rate',10)}%"):
-                    ea, eb = st.columns([4, 1])
-                    with ea:
-                        with st.form(f"edit_offer_{off['id']}"):
-                            ep = st.text_input(t("offers_field_prog"),        value=off.get("program_name",""),  key=f"op_{off['id']}")
-                            es = st.text_input(t("offers_field_start"),        value=off.get("start_date",""),    key=f"os_{off['id']}")
-                            epp= st.text_input(t("offers_field_promo"),        value=off.get("price_promo",""),   key=f"opp_{off['id']}")
-                            est= st.text_input(t("offers_field_std"),           value=off.get("price_standard",""),key=f"ost_{off['id']}")
-                            ec = st.number_input(t("offers_field_commission"),  value=float(off.get("commission_rate",10)), step=0.5, min_value=0.0, max_value=100.0, key=f"oc_{off['id']}")
-                            ea2= st.checkbox(t("offers_active") if not off.get("is_active") else t("offers_toggle_active"),
-                                             value=bool(off.get("is_active")), key=f"oa_{off['id']}")
-                            sv_o = st.form_submit_button(t("offers_btn_save"), use_container_width=True)
-                        if sv_o:
-                            db.update_offer(int(off["id"]), {"program_name": ep, "start_date": es,
-                                "price_promo": epp, "price_standard": est,
-                                "commission_rate": ec, "is_active": ea2})
-                            st.success(t("offers_success_update")); st.rerun()
-                    with eb:
-                        if st.button(t("offers_btn_delete"), key=f"del_off_{off['id']}"):
-                            db.delete_offer(int(off["id"]))
-                            st.success(t("offers_success_delete")); st.rerun()
+
+
 
     # ── Global Config (default values when no offer is assigned)
     with t1:
