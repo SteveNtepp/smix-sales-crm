@@ -189,14 +189,27 @@ def init_db():
         )
     """)
 
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS offers (
+            id              SERIAL PRIMARY KEY,
+            program_name    TEXT NOT NULL,
+            start_date      TEXT DEFAULT '',
+            price_promo     TEXT DEFAULT '',
+            price_standard  TEXT DEFAULT '',
+            commission_rate FLOAT DEFAULT 10,
+            is_active       BOOLEAN DEFAULT true,
+            created_at      TIMESTAMP DEFAULT NOW()
+        )
+    """)
+
     # Schema Migrations
     try:
         c.execute("ALTER TABLE scripts ADD COLUMN IF NOT EXISTS attachment_url TEXT")
         c.execute("ALTER TABLE script_templates ADD COLUMN IF NOT EXISTS attachment_url TEXT")
+        c.execute("ALTER TABLE leads ADD COLUMN IF NOT EXISTS offer_id INTEGER REFERENCES offers(id) ON DELETE SET NULL")
         conn.commit()
     except Exception as e:
         conn.rollback()
-        # Log error or ignore if columns already exist (though IF NOT EXISTS handles it)
         pass
 
     _seed_users(conn)
@@ -658,6 +671,89 @@ def update_config(key: str, value: str):
     conn.close()
 
 
+# ── OFFERS ────────────────────────────────────────────────────────────────────
+
+@st.cache_data
+def get_offers() -> list:
+    """Return all offers ordered by id."""
+    conn = get_connection()
+    with conn.cursor() as cur:
+        cur.execute("SELECT * FROM offers ORDER BY id")
+        rows = cur.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_offer(offer_id: int) -> dict:
+    """Return a single offer by id."""
+    conn = get_connection()
+    with conn.cursor() as cur:
+        cur.execute("SELECT * FROM offers WHERE id=%s", (offer_id,))
+        row = cur.fetchone()
+    conn.close()
+    return dict(row) if row else {}
+
+
+def add_offer(data: dict) -> int:
+    """Insert a new offer and return its id."""
+    clear_cache()
+    conn = get_connection()
+    with conn.cursor() as cur:
+        cur.execute("""
+            INSERT INTO offers (program_name, start_date, price_promo, price_standard, commission_rate, is_active)
+            VALUES (%(program_name)s, %(start_date)s, %(price_promo)s, %(price_standard)s, %(commission_rate)s, %(is_active)s)
+            RETURNING id
+        """, {
+            "program_name":   data.get("program_name", ""),
+            "start_date":     data.get("start_date", ""),
+            "price_promo":    data.get("price_promo", ""),
+            "price_standard": data.get("price_standard", ""),
+            "commission_rate": float(data.get("commission_rate", 10)),
+            "is_active":      bool(data.get("is_active", True)),
+        })
+        oid = cur.fetchone()["id"]
+    conn.commit()
+    conn.close()
+    return oid
+
+
+def update_offer(offer_id: int, data: dict):
+    """Update an existing offer."""
+    clear_cache()
+    conn = get_connection()
+    with conn.cursor() as cur:
+        cur.execute("""
+            UPDATE offers SET
+                program_name=%(program_name)s,
+                start_date=%(start_date)s,
+                price_promo=%(price_promo)s,
+                price_standard=%(price_standard)s,
+                commission_rate=%(commission_rate)s,
+                is_active=%(is_active)s
+            WHERE id=%(id)s
+        """, {
+            "id":             offer_id,
+            "program_name":   data.get("program_name", ""),
+            "start_date":     data.get("start_date", ""),
+            "price_promo":    data.get("price_promo", ""),
+            "price_standard": data.get("price_standard", ""),
+            "commission_rate": float(data.get("commission_rate", 10)),
+            "is_active":      bool(data.get("is_active", True)),
+        })
+    conn.commit()
+    conn.close()
+
+
+def delete_offer(offer_id: int):
+    """Delete an offer (leads with this offer_id will have offer_id set to NULL)."""
+    clear_cache()
+    conn = get_connection()
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM offers WHERE id=%s", (offer_id,))
+    conn.commit()
+    conn.close()
+
+
 # ── SCRIPTS ───────────────────────────────────────────────────────────────────
 
 @st.cache_data
@@ -826,7 +922,7 @@ def add_lead(data: dict) -> int:
         "available": available, "fast_response": fast_response, "score": score,
         "temperature": temp, "campaign": "", "adset": "", "creative": "",
         "notes": "", "last_contact": "", "follow_up_date": "", "follow_up_day": 0,
-        "amount_paid": 0.0
+        "amount_paid": 0.0, "offer_id": None,
     }
     
     data_to_save = {**lead_defaults, **data}
@@ -834,6 +930,9 @@ def add_lead(data: dict) -> int:
     data_to_save.update({"score": score, "temperature": temp, 
                         "budget_confirmed": budget_confirmed, "available": available, 
                         "fast_response": fast_response})
+    # Normalise offer_id
+    if not data_to_save.get("offer_id"):
+        data_to_save["offer_id"] = None
 
     conn = get_connection()
     with conn.cursor() as cur:
@@ -841,11 +940,11 @@ def add_lead(data: dict) -> int:
             INSERT INTO leads
             (name,phone,email,assigned_to,status,goal,profile_type,urgency,
              budget_confirmed,available,fast_response,score,temperature,
-             campaign,adset,creative,notes,last_contact,follow_up_date,follow_up_day,amount_paid)
+             campaign,adset,creative,notes,last_contact,follow_up_date,follow_up_day,amount_paid,offer_id)
             VALUES
             (%(name)s,%(phone)s,%(email)s,%(assigned_to)s,%(status)s,%(goal)s,%(profile_type)s,%(urgency)s,
              %(budget_confirmed)s,%(available)s,%(fast_response)s,%(score)s,%(temperature)s,
-             %(campaign)s,%(adset)s,%(creative)s,%(notes)s,%(last_contact)s,%(follow_up_date)s,%(follow_up_day)s,%(amount_paid)s)
+             %(campaign)s,%(adset)s,%(creative)s,%(notes)s,%(last_contact)s,%(follow_up_date)s,%(follow_up_day)s,%(amount_paid)s,%(offer_id)s)
             RETURNING id
         """, data_to_save)
         lead_id = cur.fetchone()["id"]
@@ -872,7 +971,8 @@ def update_lead(lead_id: int, data: dict):
         "goal": "", "profile_type": "", "urgency": "", "budget_confirmed": budget_confirmed,
         "available": available, "fast_response": fast_response, "score": score,
         "temperature": temp, "campaign": "", "adset": "", "creative": "",
-        "notes": "", "last_contact": "", "follow_up_date": "", "amount_paid": 0.0
+        "notes": "", "last_contact": "", "follow_up_date": "", "amount_paid": 0.0,
+        "offer_id": None,
     }
 
     data_to_update = {**lead_defaults, **data}
@@ -881,6 +981,9 @@ def update_lead(lead_id: int, data: dict):
         "budget_confirmed": budget_confirmed, "available": available, 
         "fast_response": fast_response, "updated_at": datetime.now(), "id": lead_id
     })
+    # Normalise offer_id
+    if not data_to_update.get("offer_id"):
+        data_to_update["offer_id"] = None
 
     conn = get_connection()
     with conn.cursor() as cur:
@@ -892,7 +995,8 @@ def update_lead(lead_id: int, data: dict):
                 fast_response=%(fast_response)s, score=%(score)s, temperature=%(temperature)s,
                 campaign=%(campaign)s, adset=%(adset)s, creative=%(creative)s,
                 amount_paid=%(amount_paid)s, notes=%(notes)s, last_contact=%(last_contact)s,
-                follow_up_date=%(follow_up_date)s, updated_at=%(updated_at)s
+                follow_up_date=%(follow_up_date)s, updated_at=%(updated_at)s,
+                offer_id=%(offer_id)s
             WHERE id=%(id)s
         """, data_to_update)
     conn.commit()
@@ -947,17 +1051,26 @@ def get_upcoming_followups(assigned_to: str = None) -> pd.DataFrame:
 
 @st.cache_data(ttl=300)
 def get_team_stats() -> pd.DataFrame:
+    """Per-agent stats, using each lead's offer commission_rate (falls back to global 10%)."""
     conn = get_connection()
     df = pd.read_sql_query("""
         SELECT
-            assigned_to AS agent,
+            l.assigned_to AS agent,
             COUNT(*) AS total_leads,
-            SUM(CASE WHEN status='Inscrit/Soldé' THEN 1 ELSE 0 END) AS closed,
-            SUM(CASE WHEN status='Perdu'         THEN 1 ELSE 0 END) AS lost,
-            SUM(CASE WHEN status='Nouveau'       THEN 1 ELSE 0 END) AS new_leads,
-            COALESCE(SUM(CASE WHEN status='Inscrit/Soldé' THEN amount_paid ELSE 0 END), 0) AS revenue,
-            ROUND(CAST(COALESCE(SUM(CASE WHEN status='Inscrit/Soldé' THEN amount_paid ELSE 0 END), 0) * 0.10 AS NUMERIC), 0) AS commission
-        FROM leads GROUP BY assigned_to
+            SUM(CASE WHEN l.status='Inscrit/Soldé' THEN 1 ELSE 0 END) AS closed,
+            SUM(CASE WHEN l.status='Perdu'         THEN 1 ELSE 0 END) AS lost,
+            SUM(CASE WHEN l.status='Nouveau'       THEN 1 ELSE 0 END) AS new_leads,
+            COALESCE(SUM(CASE WHEN l.status='Inscrit/Soldé' THEN l.amount_paid ELSE 0 END), 0) AS revenue,
+            ROUND(CAST(
+                COALESCE(SUM(
+                    CASE WHEN l.status='Inscrit/Soldé'
+                    THEN l.amount_paid * COALESCE(o.commission_rate, 10) / 100.0
+                    ELSE 0 END
+                ), 0)
+            AS NUMERIC), 0) AS commission
+        FROM leads l
+        LEFT JOIN offers o ON o.id = l.offer_id
+        GROUP BY l.assigned_to
     """, get_engine())
     conn.close()
     if not df.empty:
@@ -968,16 +1081,20 @@ def get_team_stats() -> pd.DataFrame:
 
 
 def get_agent_commission(username: str) -> float:
-    """Commission for a specific agent from their closed leads."""
+    """Commission for a specific agent using per-offer rate (default 10%)."""
     conn = get_connection()
     with conn.cursor() as cur:
         cur.execute("""
-            SELECT COALESCE(SUM(amount_paid), 0) AS revenue
-            FROM leads WHERE assigned_to=%s AND status='Inscrit/Soldé'
+            SELECT COALESCE(SUM(
+                l.amount_paid * COALESCE(o.commission_rate, 10) / 100.0
+            ), 0) AS commission
+            FROM leads l
+            LEFT JOIN offers o ON o.id = l.offer_id
+            WHERE l.assigned_to=%s AND l.status='Inscrit/Soldé'
         """, (username,))
         row = cur.fetchone()
     conn.close()
-    return float(row["revenue"]) * 0.10 if row else 0.0
+    return float(row["commission"]) if row else 0.0
 
 
 @st.cache_data(ttl=300)
