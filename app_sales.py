@@ -1097,12 +1097,14 @@ def page_cockpit_admin(user: dict):
         st.error("🔒 Accès réservé."); return
 
 
-    t_offers,t1,t2,t3,t4,t5,t6,t7,t8 = st.tabs([
+    t_offers,t1,t2,t3,t4,t5,t6,t7,t8,t_sys = st.tabs([
         t("cockpit_tab_offers"), t("cockpit_tab_config"),
         t("cockpit_tab_scripts"), t("cockpit_tab_templates"),
         t("cockpit_tab_kit"), t("cockpit_tab_videos"),
-        t("cockpit_tab_agents"), t("cockpit_tab_leaderboard"), t("cockpit_tab_invoices")
+        t("cockpit_tab_agents"), t("cockpit_tab_leaderboard"), t("cockpit_tab_invoices"),
+        "🛠️ Système"
     ])
+
     cfg = db.get_config()
 
     # ── Offers CRUD
@@ -1441,7 +1443,17 @@ def page_cockpit_admin(user: dict):
                     db.log_activity(user["username"], sel_id_inv, "INVOICE_CREATED", f"Facture {inv_num} générée.")
                     st.success(t("inv_success").format(inv_num))
                     st.markdown(t("inv_pdf_link").format(pdf_url))
-                else: st.error(t("inv_err"))
+    with t_sys:
+        st.subheader("🛠️ Maintenance Système")
+        st.warning("⚠️ Utilisez ces options uniquement en cas de problème technique avec la base de données.")
+        if st.button("🔄 Forcer la synchronisation des tables (init_db)"):
+            try:
+                db.init_db()
+                st.success("✅ Tables synchronisées avec succès ! Veuillez rafraîchir la page.")
+            except Exception as e:
+                st.error(f"❌ Erreur lors de la synchronisation : {e}")
+
+    # ── Cockpit Tabs End
 
 
 
