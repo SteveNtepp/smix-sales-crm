@@ -239,11 +239,12 @@ def fu_label(date_str: str):
 
 def page_login():
     # Language toggle at top-right
-    lang_col = st.columns([3, 1])[1]
-    with lang_col:
-        if st.button(t("lang_toggle_label"), key="lang_login", use_container_width=True):
+    c_sp, c_lang = st.columns([10, 1])
+    with c_lang:
+        if st.button(t("lang_toggle_label"), key="lang_login"):
             st.session_state.lang = "en" if st.session_state.lang == "fr" else "fr"
             st.rerun()
+
     col = st.columns([1, 2, 1])[1]
     with col:
         st.markdown(f"""
@@ -289,9 +290,8 @@ def render_sidebar(user: dict):
             st.rerun()
         st.markdown("---")
 
-        st.markdown(t("nav_label"))
-        st.markdown("---")
         nav = [("dashboard", t("nav_dashboard")),
+
                ("leads",     t("nav_leads")),
                ("bulk",      t("nav_bulk")),
                ("analytics", t("nav_analytics")),
@@ -306,6 +306,13 @@ def render_sidebar(user: dict):
                 st.rerun()
 
         st.markdown("---")
+        if st.button(t("sidebar_logout"), key="logout_btn", use_container_width=True):
+            st.session_state.authenticated = False
+            st.session_state.user = None
+            st.rerun()
+
+        st.markdown("---")
+
         # Active offer: prefer first active offer, fall back to config
         offers = db.get_offers()
         active_offers = [o for o in offers if o.get("is_active")]

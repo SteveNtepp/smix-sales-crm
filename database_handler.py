@@ -675,13 +675,16 @@ def update_config(key: str, value: str):
 
 @st.cache_data
 def get_offers() -> list:
-    """Return all offers ordered by id."""
-    conn = get_connection()
-    with conn.cursor() as cur:
-        cur.execute("SELECT * FROM offers ORDER BY id")
-        rows = cur.fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+    try:
+        conn = get_db_connection()
+        c = conn.cursor()
+        c.execute("SELECT * FROM offers ORDER BY id")
+        cols = [d[0] for d in c.description]
+        res = [dict(zip(cols, row)) for row in c.fetchall()]
+        conn.close()
+        return res
+    except Exception:
+        return []
 
 
 def get_offer(offer_id: int) -> dict:
@@ -1052,27 +1055,45 @@ def get_upcoming_followups(assigned_to: str = None) -> pd.DataFrame:
 @st.cache_data(ttl=300)
 def get_team_stats() -> pd.DataFrame:
     """Per-agent stats, using each lead's offer commission_rate (falls back to global 10%)."""
-    conn = get_connection()
-    df = pd.read_sql_query("""
-        SELECT
-            l.assigned_to AS agent,
-            COUNT(*) AS total_leads,
-            SUM(CASE WHEN l.status='Inscrit/Soldé' THEN 1 ELSE 0 END) AS closed,
-            SUM(CASE WHEN l.status='Perdu'         THEN 1 ELSE 0 END) AS lost,
-            SUM(CASE WHEN l.status='Nouveau'       THEN 1 ELSE 0 END) AS new_leads,
-            COALESCE(SUM(CASE WHEN l.status='Inscrit/Soldé' THEN l.amount_paid ELSE 0 END), 0) AS revenue,
-            ROUND(CAST(
-                COALESCE(SUM(
-                    CASE WHEN l.status='Inscrit/Soldé'
-                    THEN l.amount_paid * COALESCE(o.commission_rate, 10) / 100.0
-                    ELSE 0 END
-                ), 0)
-            AS NUMERIC), 0) AS commission
-        FROM leads l
-        LEFT JOIN offers o ON o.id = l.offer_id
-        GROUP BY l.assigned_to
-    """, get_engine())
-    conn.close()
+    try:
+        conn = get_connection()
+        df = pd.read_sql_query("""
+            SELECT
+                l.assigned_to AS agent,
+                COUNT(*) AS total_leads,
+                SUM(CASE WHEN l.status='Inscrit/Soldé' THEN 1 ELSE 0 END) AS closed,
+                SUM(CASE WHEN l.status='Perdu'         THEN 1 ELSE 0 END) AS lost,
+                SUM(CASE WHEN l.status='Nouveau'       THEN 1 ELSE 0 END) AS new_leads,
+                COALESCE(SUM(CASE WHEN l.status='Inscrit/Soldé' THEN l.amount_paid ELSE 0 END), 0) AS revenue,
+                ROUND(CAST(
+                    COALESCE(SUM(
+                        CASE WHEN l.status='Inscrit/Soldé'
+                        THEN l.amount_paid * COALESCE(o.commission_rate, 10) / 100.0
+                        ELSE 0 END
+                    ), 0)
+                AS NUMERIC), 0) AS commission
+            FROM leads l
+            LEFT JOIN offers o ON o.id = l.offer_id
+            GROUP BY l.assigned_to
+        """, get_engine())
+        conn.close()
+    except Exception:
+        # Fallback if offers table doesn't exist
+        conn = get_connection()
+        df = pd.read_sql_query("""
+            SELECT
+                assigned_to AS agent,
+                COUNT(*) AS total_leads,
+                SUM(CASE WHEN status='Inscrit/Soldé' THEN 1 ELSE 0 END) AS closed,
+                SUM(CASE WHEN status='Perdu'         THEN 1 ELSE 0 END) AS lost,
+                SUM(CASE WHEN status='Nouveau'       THEN 1 ELSE 0 END) AS new_leads,
+                COALESCE(SUM(CASE WHEN status='Inscrit/Soldé' THEN amount_paid ELSE 0 END), 0) AS revenue,
+                ROUND(CAST(COALESCE(SUM(CASE WHEN status='Inscrit/Soldé' THEN amount_paid * 0.1 ELSE 0 END), 0) AS NUMERIC), 0) AS commission
+            FROM leads
+            GROUP BY assigned_to
+        """, get_engine())
+        conn.close()
+
     if not df.empty:
         df["conversion_rate"] = df.apply(
             lambda r: round(r["closed"] / r["total_leads"] * 100, 1) if r["total_leads"] > 0 else 0.0,
@@ -1080,21 +1101,36 @@ def get_team_stats() -> pd.DataFrame:
     return df
 
 
+
 def get_agent_commission(username: str) -> float:
     """Commission for a specific agent using per-offer rate (default 10%)."""
-    conn = get_connection()
-    with conn.cursor() as cur:
-        cur.execute("""
-            SELECT COALESCE(SUM(
-                l.amount_paid * COALESCE(o.commission_rate, 10) / 100.0
-            ), 0) AS commission
-            FROM leads l
-            LEFT JOIN offers o ON o.id = l.offer_id
-            WHERE l.assigned_to=%s AND l.status='Inscrit/Soldé'
-        """, (username,))
-        row = cur.fetchone()
-    conn.close()
-    return float(row["commission"]) if row else 0.0
+    try:
+        conn = get_connection()
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT COALESCE(SUM(
+                    l.amount_paid * COALESCE(o.commission_rate, 10) / 100.0
+                ), 0) AS commission
+                FROM leads l
+                LEFT JOIN offers o ON o.id = l.offer_id
+                WHERE l.assigned_to=%s AND l.status='Inscrit/Soldé'
+            """, (username,))
+            row = cur.fetchone()
+        conn.close()
+        return float(row["commission"]) if row else 0.0
+    except Exception:
+        # Fallback if offers table doesn't exist
+        conn = get_connection()
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT COALESCE(SUM(amount_paid * 0.1), 0) AS commission
+                FROM leads
+                WHERE assigned_to=%s AND status='Inscrit/Soldé'
+            """, (username,))
+            row = cur.fetchone()
+        conn.close()
+        return float(row["commission"]) if row else 0.0
+
 
 
 @st.cache_data(ttl=300)
